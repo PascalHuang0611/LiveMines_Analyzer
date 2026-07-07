@@ -16,7 +16,7 @@
         body {
             background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
             color: #e2e8f0;
-            font-family: 'Inter', 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             min-height: 100vh;
         }
 
@@ -132,13 +132,17 @@
             animation: subtitle-scan 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.75s forwards;
         }
         
-        @keyframes fade-in-delayed {
-            0%, 80% { opacity: 0; }
+        @keyframes fade-in {
+            0% { opacity: 0; }
             100% { opacity: 1; }
         }
-        
+
         .animate-fade-in-delayed {
-            animation: fade-in-delayed 1.5s ease forwards;
+            animation: fade-in 0.3s ease forwards;
+        }
+
+        .animate-fade-in {
+            animation: fade-in 0.2s ease forwards;
         }
         
         table {
@@ -171,8 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold"
-                        style="font-family: 'Inter', sans-serif;">v0.9</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.9.1</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -184,11 +187,35 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
                     </svg>
-                    匯入注單資料夾
+                    匯入 CSV 資料夾
                     <input type="file" webkitdirectory directory multiple @change="handleFileSelect" class="hidden" />
                 </label>
+                <div class="mt-3 flex flex-col gap-1 text-sm font-medium">
+                    <div class="flex items-center gap-2" :class="hasData ? 'text-green-400' : 'text-gray-500'">
+                        <div class="w-2 h-2 rounded-full" :class="hasData ? 'bg-green-400 shadow-[0_0_8px_#4ade80]' : 'bg-gray-500'"></div>
+                        玩家注單 (bill_records)
+                    </div>
+                    <div class="flex items-center gap-2" :class="hasGameData ? 'text-green-400' : 'text-gray-500'">
+                        <div class="w-2 h-2 rounded-full" :class="hasGameData ? 'bg-green-400 shadow-[0_0_8px_#4ade80]' : 'bg-gray-500'"></div>
+                        大盤賽果 (game_results)
+                    </div>
+                </div>
             </div>
         </header>
+
+        <!-- Tabs Navigation -->
+        <div class="flex gap-4 mb-6 border-b border-white/10 pb-2">
+            <button @click="activeTab = 'player'" 
+                class="px-6 py-2 rounded-t-lg font-bold transition-all"
+                :class="activeTab === 'player' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'">
+                玩家分析 (Player)
+            </button>
+            <button @click="activeTab = 'house'" 
+                class="px-6 py-2 rounded-t-lg font-bold transition-all"
+                :class="activeTab === 'house' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'">
+                大盤分析 (House)
+            </button>
+        </div>
 
         <!-- Loading State -->
         <div v-if="isProcessing" class="glass rounded-2xl p-12 text-center flex flex-col items-center justify-center">
@@ -203,8 +230,8 @@
             <p class="text-gray-400 mt-2">已載入 {{ processedFiles }} 個檔案，處理 {{ totalRawRows.toLocaleString() }} 筆注單</p>
         </div>
 
-        <!-- Dashboard Content -->
-        <div v-if="!isProcessing && hasData" class="space-y-6">
+        <!-- Dashboard Content (Player Analytics) -->
+        <div v-if="!isProcessing && hasData && activeTab === 'player'" class="space-y-6 animate-fade-in-delayed">
             
             <!-- Controls -->
             <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
@@ -439,7 +466,40 @@
                     </div>
 
                     <div>
-                        <h4 class="text-sm font-bold text-gray-300 mb-3 border-b border-white/10 pb-2">押注格數分佈</h4>
+                        <!-- EXBET Stats -->
+                        <h4 class="text-sm font-bold text-gray-300 mb-3 border-b border-white/10 pb-2">EXBET 投注統計</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
+                                <div class="text-xs text-gray-500 mb-1">參與率</div>
+                                <div class="font-bold text-white text-lg">
+                                    {{ selectedPlayer.roundsCount > 0 ? (selectedPlayer.exbetRounds / selectedPlayer.roundsCount * 100).toFixed(1) : 0 }}%
+                                </div>
+                                <div class="text-xs text-gray-400">{{ selectedPlayer.exbetRounds }} 局</div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
+                                <div class="text-xs text-gray-500 mb-1">累計押注</div>
+                                <div class="font-bold text-gray-300 text-lg">
+                                    {{ formatMoney(selectedPlayer.exbetBet) }}
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
+                                <div class="text-xs text-gray-500 mb-1">累計贏分</div>
+                                <div class="font-bold text-gray-300 text-lg">
+                                    {{ formatMoney(selectedPlayer.exbetPayout) }}
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
+                                <div class="text-xs text-gray-500 mb-1">EXBET RTP</div>
+                                <div class="font-bold text-yellow-400 text-lg">
+                                    {{ selectedPlayer.exbetBet > 0 ? (selectedPlayer.exbetPayout / selectedPlayer.exbetBet * 100).toFixed(2) : '0.00' }}%
+                                </div>
+                                <div class="text-xs" :class="selectedPlayer.exbetWinLoss > 0 ? 'text-green-400' : (selectedPlayer.exbetWinLoss < 0 ? 'text-red-400' : 'text-gray-400')">
+                                    {{ selectedPlayer.exbetWinLoss > 0 ? '+' : '' }}{{ formatMoney(selectedPlayer.exbetWinLoss) }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4 class="text-sm font-bold text-gray-300 mb-3 border-b border-white/10 pb-2">盤面押注格數分佈</h4>
                         <div class="grid grid-cols-3 md:grid-cols-5 gap-2">
                             <div v-for="g in 9" :key="g" 
                                 class="rounded p-2 text-center border border-white/5 transition-all"
@@ -486,11 +546,24 @@
                 </div>
             </div>
         </div>
-        
+
+        <!-- Dashboard Content (House Analytics) -->
+        <div v-if="!isProcessing && hasGameData && activeTab === 'house'" class="space-y-6 animate-fade-in-delayed">
+            <div class="glass rounded-2xl p-6 text-center">
+                <h2 class="text-2xl font-bold text-indigo-300">大盤分析功能開發中...</h2>
+                <p class="text-gray-400 mt-2">已成功解析 {{ gameResultsData.length }} 局大盤資料</p>
+            </div>
+        </div>
+
         <!-- Empty State -->
-        <div v-if="!isProcessing && !hasData" class="glass rounded-2xl p-12 text-center mt-10 animate-fade-in-delayed">
-            <h2 class="text-2xl font-bold text-gray-500 mb-2">等待載入資料...</h2>
-            <p class="text-gray-600">請點擊上方按鈕選擇包含 LiveMines 格式 CSV 的資料夾</p>
+        <div v-if="!isProcessing && activeTab === 'player' && !hasData" class="glass rounded-2xl p-12 text-center mt-10 animate-fade-in-delayed">
+            <h2 class="text-2xl font-bold text-gray-500 mb-2">等待載入注單資料...</h2>
+            <p class="text-gray-600">請點擊上方按鈕選擇包含 bill_records 格式 CSV 的資料夾</p>
+        </div>
+        
+        <div v-if="!isProcessing && activeTab === 'house' && !hasGameData" class="glass rounded-2xl p-12 text-center mt-10 animate-fade-in-delayed">
+            <h2 class="text-2xl font-bold text-gray-500 mb-2">等待載入大盤資料...</h2>
+            <p class="text-gray-600">請點擊上方按鈕選擇包含 game_results 格式 CSV 的資料夾</p>
         </div>
     </div>
 
@@ -499,20 +572,15 @@
 
         createApp({
             setup() {
+                const activeTab = ref('player');
                 const isProcessing = ref(false);
-                const hasData = ref(false);
+                const hasData = ref(false); // for bill_records
+                const hasGameData = ref(false); // for game_results
+                const gameResultsData = ref([]);
                 const processedFiles = ref(0);
                 const totalRawRows = ref(0);
                 
-                const stats = ref({
-                    totalPhysicalRounds: 0,
-                    totalPlayerRounds: 0,
-                    uniquePlayers: 0,
-                    totalTurnover: 0,
-                    totalPayout: 0,
-                    ggr: 0,
-                    rtp: 0
-                });
+                const totalPlayerRounds = ref(0);
 
                 const gridsBetDist = ref({}); // { 1: count, 2: count ... }
                 const ballCounts = ref(Array(9).fill(0));
@@ -520,7 +588,6 @@
                 const hotzoneMode = ref('ball'); // 'ball' or 'lightning'
 
                 const playersMap = ref({});
-                const rawPlayerAgg = ref({});
                 const savedHigh = localStorage.getItem('livemines_high_threshold');
                 const savedMid = localStorage.getItem('livemines_mid_threshold');
                 
@@ -575,16 +642,16 @@
                     if (files.length === 0) return;
 
                     isProcessing.value = true;
-                    hasData.value = false;
                     processedFiles.value = 0;
                     totalRawRows.value = 0;
 
                     const groupedRounds = {}; // key: GameCode_Account
                     const uniquePhysicalGames = {}; // key: GameCode, value: gameResult string
                     const playerAgg = {}; // key: Account
+                    let tempGameResults = [];
                     
-                    let turnoverAcc = 0;
-                    let payoutAcc = 0;
+                    let parsedBills = false;
+                    let parsedGames = false;
 
                     for (const file of files) {
                         await new Promise(resolve => {
@@ -592,17 +659,28 @@
                                 header: true,
                                 skipEmptyLines: true,
                                 complete: (results) => {
-                                    totalRawRows.value += results.data.length;
+                                    const headers = results.meta.fields || [];
                                     
-                                    results.data.forEach(row => {
-                                        const account = row['Account'];
-                                        const gameCode = row['Game Code'];
-                                        if(!account || !gameCode) return;
-                                        
-                                        const bet = parseFloat(row['Bet Amount']) || 0;
-                                        const payout = parseFloat(row['Payout']) || 0;
-                                        const wl = parseFloat(row['Member Win/Loss']) || 0;
-                                        const balance = parseFloat(row['Balance']) || 0;
+                                    // Check if it's game_results
+                                    if (headers.includes('Risk Control') && headers.includes('Jackpot Pool')) {
+                                        totalRawRows.value += results.data.length;
+                                        tempGameResults = tempGameResults.concat(results.data);
+                                        parsedGames = true;
+                                    } 
+                                    // Check if it's bill_records
+                                    else if (headers.includes('Account') && headers.includes('Bet Amount')) {
+                                        totalRawRows.value += results.data.length;
+                                        parsedBills = true;
+                                        results.data.forEach(row => {
+                                            const account = row['Account'];
+                                            const gameCode = row['Game Code'];
+                                            if(!account || !gameCode) return;
+                                            
+                                            const bet = parseFloat(row['Bet Amount']) || 0;
+                                            const payout = parseFloat(row['Payout']) || 0;
+                                            const wl = parseFloat(row['Member Win/Loss']) || 0;
+                                            const balance = parseFloat(row['Balance']) || 0;
+                                            const betPlace = parseInt(row['Bet Place']);
 
                                         // 1. Group by Player Round
                                         const roundKey = `${gameCode}_${account}`;
@@ -614,10 +692,26 @@
                                                 winLoss: 0,
                                                 bet: 0,
                                                 billTime: 0,
-                                                balance: 0
+                                                balance: 0,
+                                                exbetCount: 0,
+                                                exbetBet: 0,
+                                                exbetPayout: 0,
+                                                exbetWinLoss: 0
                                             };
                                         }
-                                        groupedRounds[roundKey].grids += 1;
+                                        
+                                        if (betPlace >= 1 && betPlace <= 9) {
+                                            groupedRounds[roundKey].grids += 1;
+                                        } else if (betPlace === 10) {
+                                            groupedRounds[roundKey].exbetCount += 1;
+                                            groupedRounds[roundKey].exbetBet += bet;
+                                            groupedRounds[roundKey].exbetPayout += payout;
+                                            groupedRounds[roundKey].exbetWinLoss += wl;
+                                        } else if (isNaN(betPlace)) {
+                                            // Fallback for older CSVs without Bet Place
+                                            groupedRounds[roundKey].grids += 1;
+                                        }
+                                        
                                         groupedRounds[roundKey].payout += payout;
                                         groupedRounds[roundKey].winLoss += wl;
                                         groupedRounds[roundKey].bet += bet;
@@ -626,16 +720,15 @@
                                             groupedRounds[roundKey].billTime = new Date(row['Bill Time']).getTime();
                                         }
                                         
-                                        // 2. Global Accums
-                                        turnoverAcc += bet;
-                                        payoutAcc += payout;
-
-                                        // 3. Unique Physical Games (for hot/cold)
+                                        // 2. Unique Physical Games (for hot/cold)
                                         if(!uniquePhysicalGames[gameCode]) {
-                                            uniquePhysicalGames[gameCode] = row['Game Result'] || '';
+                                            uniquePhysicalGames[gameCode] = {
+                                                rawRes: row['Game Result'] || '',
+                                                rawLight: row['FreeLightning'] || ''
+                                            };
                                         }
 
-                                        // 4. Player Aggregation
+                                        // 3. Player Aggregation
                                         if(!playerAgg[account]) {
                                             playerAgg[account] = {
                                                 account: account,
@@ -643,7 +736,11 @@
                                                 totalPayout: 0,
                                                 winLoss: 0,
                                                 totalGrids: 0,
-                                                roundsSet: new Set()
+                                                roundsSet: new Set(),
+                                                exbetRounds: 0,
+                                                exbetBet: 0,
+                                                exbetPayout: 0,
+                                                exbetWinLoss: 0
                                             };
                                         }
                                         playerAgg[account].totalTurnover += bet;
@@ -652,6 +749,7 @@
                                         playerAgg[account].totalGrids += 1;
                                         playerAgg[account].roundsSet.add(gameCode);
                                     });
+                                    }
                                     resolve();
                                 }
                             });
@@ -659,87 +757,90 @@
                         processedFiles.value++;
                     }
 
-                    // Compute Grids Bet Distribution
-                    const tempDist = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0};
-                    Object.values(groupedRounds).forEach(r => {
-                        const g = Math.min(r.grids, 9); // Cap at 9 theoretically
-                        if(tempDist[g] !== undefined) tempDist[g]++;
-                    });
-                    gridsBetDist.value = tempDist;
+                    if (parsedGames) {
+                        gameResultsData.value = tempGameResults;
+                        hasGameData.value = true;
+                    }
 
-                    // Compute Physical Hot Zones
-                    const tempBalls = Array(9).fill(0);
-                    const tempLightnings = Array(9).fill(0);
-                    
-                    Object.values(uniquePhysicalGames).forEach(resStr => {
-                        // result:4,5,9;freeLightning:9,2;
-                        const parts = resStr.split(';');
-                        parts.forEach(p => {
-                            if(p.startsWith('result:')) {
-                                const nums = p.replace('result:', '').split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
-                                nums.forEach(n => {
-                                    if(n >= 1 && n <= 9) tempBalls[n-1]++;
-                                });
-                            } else if(p.startsWith('freeLightning:')) {
-                                const nums = p.replace('freeLightning:', '').split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
-                                nums.forEach(n => {
-                                    if(n >= 1 && n <= 9) tempLightnings[n-1]++;
-                                });
+                    if (parsedBills) {
+                        // Compute Grids Bet Distribution
+                        const tempDist = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0};
+                        Object.values(groupedRounds).forEach(r => {
+                            if (r.grids >= 1 && r.grids <= 9) {
+                                tempDist[r.grids]++;
+                            } else if (r.grids > 9) {
+                                // Fallback if older CSVs have grids > 9
+                                tempDist[9]++;
                             }
                         });
-                    });
-                    ballCounts.value = tempBalls;
-                    lightningCounts.value = tempLightnings;
+                        gridsBetDist.value = tempDist;
 
-                    // Setup Players
-                    Object.values(playerAgg).forEach(p => {
-                        p.roundsCount = p.roundsSet.size;
-                        p.totalHitRounds = 0;
-                        p.totalWinRounds = 0;
-                        p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
-                        p.rounds = [];
-                        p.gridsDist = {};
-                        delete p.roundsSet;
-                    });
-
-                    Object.values(groupedRounds).forEach(r => {
-                        const account = r.account;
-                        if (!playerAgg[account]) return;
-                        if (r.payout > 0) playerAgg[account].totalHitRounds++;
-                        if (r.winLoss > 0) playerAgg[account].totalWinRounds++;
+                        // Compute Physical Hot Zones
+                        const tempBalls = Array(9).fill(0);
+                        const tempLightnings = Array(9).fill(0);
                         
-                        playerAgg[account].rounds.push(r);
+                        Object.values(uniquePhysicalGames).forEach(u => {
+                            const b = String(u.rawRes).split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
+                            const l = String(u.rawLight).split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
+                            b.forEach(n => {
+                                if(n >= 1 && n <= 9) tempBalls[n-1]++;
+                            });
+                            l.forEach(n => {
+                                if(n >= 1 && n <= 9) tempLightnings[n-1]++;
+                            });
+                        });
+                        ballCounts.value = tempBalls;
+                        lightningCounts.value = tempLightnings;
+
+                        // Setup Players
+                        Object.values(playerAgg).forEach(p => {
+                            p.roundsCount = p.roundsSet.size;
+                            p.totalHitRounds = 0;
+                            p.totalWinRounds = 0;
+                            p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
+                            p.rounds = [];
+                            p.gridsDist = {};
+                            delete p.roundsSet;
+                        });
+
+                        Object.values(groupedRounds).forEach(r => {
+                            const account = r.account;
+                            if (!playerAgg[account]) return;
+                            if (r.payout > 0) playerAgg[account].totalHitRounds++;
+                            if (r.winLoss > 0) playerAgg[account].totalWinRounds++;
+                            
+                            if (r.exbetCount > 0) {
+                                playerAgg[account].exbetRounds++;
+                                playerAgg[account].exbetBet += r.exbetBet;
+                                playerAgg[account].exbetPayout += r.exbetPayout;
+                                playerAgg[account].exbetWinLoss += r.exbetWinLoss;
+                            }
+
+                            playerAgg[account].rounds.push(r);
+                            
+                            if (r.grids >= 1 && r.grids <= 9) {
+                                playerAgg[account].gridsDist[r.grids] = (playerAgg[account].gridsDist[r.grids] || 0) + 1;
+                            } else if (r.grids > 9) {
+                                // Fallback for older CSVs
+                                playerAgg[account].gridsDist[9] = (playerAgg[account].gridsDist[9] || 0) + 1;
+                            }
+                        });
                         
-                        const g = Math.min(r.grids, 9);
-                        playerAgg[account].gridsDist[g] = (playerAgg[account].gridsDist[g] || 0) + 1;
-                    });
-                    
-                    Object.values(playerAgg).forEach(p => {
-                        p.rounds.sort((a, b) => a.billTime - b.billTime);
-                    });
+                        Object.values(playerAgg).forEach(p => {
+                            p.rounds.sort((a, b) => a.billTime - b.billTime);
+                        });
 
-                    rawPlayerAgg.value = playerAgg;
-                    playersMap.value = playerAgg;
+                        playersMap.value = playerAgg;
+                        totalPlayerRounds.value = Object.keys(groupedRounds).length;
 
-                    // Global Stats
-                    stats.value = {
-                        totalPhysicalRounds: Object.keys(uniquePhysicalGames).length,
-                        totalPlayerRounds: Object.keys(groupedRounds).length,
-                        uniquePlayers: Object.keys(playerAgg).length,
-                        totalTurnover: turnoverAcc,
-                        totalPayout: payoutAcc,
-                        ggr: turnoverAcc - payoutAcc,
-                        rtp: turnoverAcc > 0 ? (payoutAcc / turnoverAcc * 100) : 0
-                    };
+                        hasData.value = true;
+                        computeClusters();
+                        nextTick(() => {
+                            renderChart();
+                        });
+                    }
 
                     isProcessing.value = false;
-                    hasData.value = true;
-
-                    computeClusters();
-
-                    nextTick(() => {
-                        renderChart();
-                    });
                 };
 
                 const computeClusters = () => {
@@ -750,7 +851,7 @@
                         '休閒玩家': initStats()
                     };
 
-                    Object.values(rawPlayerAgg.value).forEach(p => {
+                    Object.values(playersMap.value).forEach(p => {
                         const avgBet = p.totalTurnover / p.roundsCount;
                         let segment = '休閒玩家';
                         if (avgBet >= highValueThreshold.value) segment = '高價值玩家';
@@ -770,6 +871,7 @@
                     clusterStats.value = clusters;
                 };
 
+
                 const recomputeStats = () => {
                     if (!hasData.value) return;
                     computeClusters();
@@ -784,7 +886,7 @@
                     }
 
                     const labels = Object.keys(gridsBetDist.value).map(k => `${k}格`);
-                    const totalRounds = stats.value.totalPlayerRounds || 1;
+                    const totalRounds = totalPlayerRounds.value || 1;
                     const data = Object.values(gridsBetDist.value).map(v => (v / totalRounds * 100).toFixed(1));
 
                     gridsChartInstance = new Chart(ctx, {
@@ -1037,8 +1139,9 @@
                 };
 
                 return {
+                    activeTab, hasGameData, gameResultsData,
                     isProcessing, hasData, processedFiles, totalRawRows,
-                    stats, sortedPlayers, formatMoney,
+                    sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
