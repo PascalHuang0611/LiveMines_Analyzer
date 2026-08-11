@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.9.1</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.92</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -241,7 +241,7 @@
                         <input type="number" v-model.number="highValueThreshold" min="1" @change="recomputeStats"
                             class="w-24 bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-right focus:border-indigo-500 focus:outline-none">
                     </div>
-                    <input type="range" v-model.number="highValueThreshold" min="1000" max="20000" step="100" @change="recomputeStats"
+                    <input type="range" v-model.number="highValueThreshold" min="0" :max="Math.max(2000, highValueThreshold)" step="10" @change="recomputeStats"
                         class="w-full mt-2">
                 </div>
                 <div>
@@ -250,7 +250,7 @@
                         <input type="number" v-model.number="midValueThreshold" min="1" @change="recomputeStats"
                             class="w-24 bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-right focus:border-cyan-500 focus:outline-none">
                     </div>
-                    <input type="range" v-model.number="midValueThreshold" min="100" max="10000" step="100" @change="recomputeStats"
+                    <input type="range" v-model.number="midValueThreshold" min="0" :max="Math.max(1000, midValueThreshold)" step="10" @change="recomputeStats"
                         class="w-full mt-2">
                     <span class="text-xs text-gray-400 mt-1 block">平均押注低於 {{ midValueThreshold }} 為休閒玩家</span>
                 </div>
@@ -272,7 +272,9 @@
                     <div class="text-sm text-gray-400 mb-1">平均單局下注額: <span class="text-white font-bold">
                         {{ clusterStats[seg]?.rounds > 0 ? formatMoney(clusterStats[seg].turnover / clusterStats[seg].rounds) : '0.00' }}
                     </span></div>
-                    <div class="text-sm text-gray-400 mb-4">平均單局押注格數: <span class="text-yellow-400 font-bold">
+                    <div class="text-sm text-gray-400 mb-4 cursor-help"
+                        :title="`只計 Bet Place 1~9 的盤面格注, 不含 EXBET\n分子 (格注筆數): ${clusterStats[seg]?.grids?.toLocaleString() || 0}\n分母 (總參與人次): ${clusterStats[seg]?.rounds?.toLocaleString() || 0}`">
+                        <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">平均單局押注格數</span>: <span class="text-yellow-400 font-bold">
                         {{ clusterStats[seg]?.rounds > 0 ? (clusterStats[seg].grids / clusterStats[seg].rounds).toFixed(2) : '0.00' }} 格
                     </span></div>
 
@@ -467,34 +469,50 @@
 
                     <div>
                         <!-- EXBET Stats -->
-                        <h4 class="text-sm font-bold text-gray-300 mb-3 border-b border-white/10 pb-2">EXBET 投注統計</h4>
+                        <h4 class="text-sm font-bold text-gray-300 mb-3 border-b border-white/10 pb-2">
+                            EXBET 投注統計
+                            <span class="font-normal text-gray-500 text-xs ml-1">（局級口徑）</span>
+                        </h4>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
+                                :title="`分子 (有押 EXBET 的局數): ${selectedPlayer.exbetRounds}\n分母 (總參與局數): ${selectedPlayer.roundsCount}`">
                                 <div class="text-xs text-gray-500 mb-1">參與率</div>
                                 <div class="font-bold text-white text-lg">
                                     {{ selectedPlayer.roundsCount > 0 ? (selectedPlayer.exbetRounds / selectedPlayer.roundsCount * 100).toFixed(1) : 0 }}%
                                 </div>
                                 <div class="text-xs text-gray-400">{{ selectedPlayer.exbetRounds }} 局</div>
                             </div>
-                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
-                                <div class="text-xs text-gray-500 mb-1">累計押注</div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
+                                :title="`Bet Place = 10 的注單金額合計\n該欄位的 Payout 恆為 0, 回報是灌在同局格注的倍數裡`">
+                                <div class="text-xs text-gray-500 mb-1">EXBET 累計押注</div>
                                 <div class="font-bold text-gray-300 text-lg">
                                     {{ formatMoney(selectedPlayer.exbetBet) }}
                                 </div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
-                                <div class="text-xs text-gray-500 mb-1">累計贏分</div>
-                                <div class="font-bold text-gray-300 text-lg">
-                                    {{ formatMoney(selectedPlayer.exbetPayout) }}
+                                <div class="text-xs text-gray-400">
+                                    占總流水 {{ selectedPlayer.totalTurnover > 0 ? (selectedPlayer.exbetBet / selectedPlayer.totalTurnover * 100).toFixed(1) : '0.0' }}%
                                 </div>
                             </div>
-                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5">
-                                <div class="text-xs text-gray-500 mb-1">EXBET RTP</div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
+                                :title="`計算公式: 該局總派彩 / 該局總投注 (投注含 EXBET)\n分子: ${formatMoney(selectedPlayer.exbetRoundPayout)}\n分母: ${formatMoney(selectedPlayer.exbetRoundBet)}`">
+                                <div class="text-xs text-gray-500 mb-1">有押 EXBET 局 RTP</div>
                                 <div class="font-bold text-yellow-400 text-lg">
-                                    {{ selectedPlayer.exbetBet > 0 ? (selectedPlayer.exbetPayout / selectedPlayer.exbetBet * 100).toFixed(2) : '0.00' }}%
+                                    {{ selectedPlayer.exbetRtp !== null ? selectedPlayer.exbetRtp.toFixed(2) + '%' : '—' }}
                                 </div>
                                 <div class="text-xs" :class="selectedPlayer.exbetWinLoss > 0 ? 'text-green-400' : (selectedPlayer.exbetWinLoss < 0 ? 'text-red-400' : 'text-gray-400')">
                                     {{ selectedPlayer.exbetWinLoss > 0 ? '+' : '' }}{{ formatMoney(selectedPlayer.exbetWinLoss) }}
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
+                                :title="`同一玩家: 有押 EXBET 的局 RTP 減去沒押 EXBET 的局 RTP\n沒押 EXBET 局 RTP: ${selectedPlayer.plainRtp !== null ? selectedPlayer.plainRtp.toFixed(2) + '%' : '無資料'}\n沒押 EXBET 局數: ${selectedPlayer.plainRounds}`">
+                                <div class="text-xs text-gray-500 mb-1">EXBET 增益</div>
+                                <div class="font-bold text-lg" :class="selectedPlayer.exbetLift === null ? 'text-gray-500' : (selectedPlayer.exbetLift > 0 ? 'text-green-400' : 'text-red-400')">
+                                    <template v-if="selectedPlayer.exbetLift !== null">
+                                        {{ selectedPlayer.exbetLift > 0 ? '+' : '' }}{{ selectedPlayer.exbetLift.toFixed(2) }} pp
+                                    </template>
+                                    <template v-else>—</template>
+                                </div>
+                                <div class="text-xs text-gray-400">
+                                    無 EXBET 局 {{ selectedPlayer.plainRtp !== null ? selectedPlayer.plainRtp.toFixed(2) + '%' : '—' }}
                                 </div>
                             </div>
                         </div>
@@ -588,11 +606,23 @@
                 const hotzoneMode = ref('ball'); // 'ball' or 'lightning'
 
                 const playersMap = ref({});
-                const savedHigh = localStorage.getItem('livemines_high_threshold');
-                const savedMid = localStorage.getItem('livemines_mid_threshold');
-                
-                const highValueThreshold = ref(savedHigh ? parseInt(savedHigh) : 10000);
-                const midValueThreshold = ref(savedMid ? parseInt(savedMid) : 2000);
+                const DEFAULT_HIGH_THRESHOLD = 200;
+                const DEFAULT_MID_THRESHOLD = 50;
+
+                // 預設門檻在 v0.92 從 10000/2000 調整為 200/50 (舊值幾乎會把所有玩家歸到休閒)。
+                // 提高版本號可清掉瀏覽器裡存的舊門檻, 讓新預設值生效一次; 之後使用者自己調的值照常保留。
+                const SETTINGS_VERSION = '2';
+                if (localStorage.getItem('livemines_settings_version') !== SETTINGS_VERSION) {
+                    localStorage.removeItem('livemines_high_threshold');
+                    localStorage.removeItem('livemines_mid_threshold');
+                    localStorage.setItem('livemines_settings_version', SETTINGS_VERSION);
+                }
+
+                const savedHigh = parseInt(localStorage.getItem('livemines_high_threshold'));
+                const savedMid = parseInt(localStorage.getItem('livemines_mid_threshold'));
+
+                const highValueThreshold = ref(Number.isFinite(savedHigh) && savedHigh > 0 ? savedHigh : DEFAULT_HIGH_THRESHOLD);
+                const midValueThreshold = ref(Number.isFinite(savedMid) && savedMid > 0 ? savedMid : DEFAULT_MID_THRESHOLD);
 
                 watch(highValueThreshold, (newVal) => {
                     localStorage.setItem('livemines_high_threshold', newVal);
@@ -739,14 +769,23 @@
                                                 roundsSet: new Set(),
                                                 exbetRounds: 0,
                                                 exbetBet: 0,
-                                                exbetPayout: 0,
-                                                exbetWinLoss: 0
+                                                // 局級口徑: EXBET 那一列的 Payout 恆為 0,
+                                                // 其回報是灌在同局格注列的倍數裡, 因此只能用整局的
+                                                // 投注/派彩來衡量 EXBET 的實際價值。
+                                                exbetRoundBet: 0,
+                                                exbetRoundPayout: 0,
+                                                plainRounds: 0,
+                                                plainRoundBet: 0,
+                                                plainRoundPayout: 0
                                             };
                                         }
                                         playerAgg[account].totalTurnover += bet;
                                         playerAgg[account].totalPayout += payout;
                                         playerAgg[account].winLoss += wl;
-                                        playerAgg[account].totalGrids += 1;
+                                        // 只計 1~9 的盤面格注; Bet Place=10 是 EXBET, 不是一格
+                                        if (!(betPlace === 10)) {
+                                            playerAgg[account].totalGrids += 1;
+                                        }
                                         playerAgg[account].roundsSet.add(gameCode);
                                     });
                                     }
@@ -812,8 +851,12 @@
                             if (r.exbetCount > 0) {
                                 playerAgg[account].exbetRounds++;
                                 playerAgg[account].exbetBet += r.exbetBet;
-                                playerAgg[account].exbetPayout += r.exbetPayout;
-                                playerAgg[account].exbetWinLoss += r.exbetWinLoss;
+                                playerAgg[account].exbetRoundBet += r.bet;
+                                playerAgg[account].exbetRoundPayout += r.payout;
+                            } else {
+                                playerAgg[account].plainRounds++;
+                                playerAgg[account].plainRoundBet += r.bet;
+                                playerAgg[account].plainRoundPayout += r.payout;
                             }
 
                             playerAgg[account].rounds.push(r);
@@ -828,6 +871,13 @@
                         
                         Object.values(playerAgg).forEach(p => {
                             p.rounds.sort((a, b) => a.billTime - b.billTime);
+
+                            // EXBET 效益: 有押 EXBET 的局 vs 沒押 EXBET 的局, 兩者的整局 RTP
+                            // (分母含 EXBET 押注, 分子是該局全部派彩)
+                            p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
+                            p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
+                            p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
+                            p.exbetWinLoss = p.exbetRoundPayout - p.exbetRoundBet;
                         });
 
                         playersMap.value = playerAgg;
