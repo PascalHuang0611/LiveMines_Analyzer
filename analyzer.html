@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.92</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.93</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -369,7 +369,19 @@
                 <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
                     全站玩家排行
                 </h3>
-                <p class="text-sm text-gray-400 mb-4 -mt-2">支援向下滾動檢視所有玩家。</p>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4 -mt-2">
+                    <p class="text-sm text-gray-400">支援向下滾動檢視所有玩家，或輸入帳號片段搜尋。</p>
+                    <div class="relative w-full md:w-80 shrink-0">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">🔍</span>
+                        <input type="text" v-model="playerSearch" placeholder="搜尋玩家帳號（模糊比對）"
+                            class="w-full bg-gray-800 text-white border border-gray-600 rounded-lg pl-9 pr-8 py-2 text-sm focus:border-indigo-500 focus:outline-none placeholder-gray-500">
+                        <button v-if="playerSearch" @click="playerSearch = ''" title="清除搜尋"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white w-5 h-5 rounded-full hover:bg-white/10 flex items-center justify-center text-xs">✕</button>
+                    </div>
+                </div>
+                <p v-if="playerSearch.trim()" class="text-xs mb-2" :class="filteredPlayers.length ? 'text-indigo-300' : 'text-yellow-400'">
+                    符合 <span class="font-bold">{{ filteredPlayers.length.toLocaleString() }}</span> 位玩家（全站共 {{ sortedPlayers.length.toLocaleString() }} 位）
+                </p>
                 <div class="overflow-x-auto overflow-y-auto max-h-[500px]" @scroll="handleTableScroll">
                     <table class="w-full text-center text-sm border-collapse">
                         <thead class="sticky top-0 z-10 bg-slate-900 shadow-md">
@@ -393,8 +405,16 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="player in sortedPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-                                <td class="p-3 text-left font-bold text-indigo-300">{{ player.account }}</td>
+                            <tr v-if="!filteredPlayers.length">
+                                <td colspan="6" class="p-8 text-center text-gray-500">
+                                    找不到帳號包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
+                                </td>
+                            </tr>
+                            <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
+                                <td class="p-3 text-left font-bold text-indigo-300">
+                                    <span v-for="(part, i) in highlightParts(player.account)" :key="i"
+                                        :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded px-0.5' : ''">{{ part.text }}</span>
+                                </td>
                                 <td class="p-3">{{ formatMoney(player.totalTurnover) }}</td>
                                 <td class="p-3">{{ formatMoney(player.totalPayout) }}</td>
                                 <td class="p-3 font-bold" :class="player.winLoss > 0 ? 'text-green-400' : (player.winLoss < 0 ? 'text-red-400' : 'text-gray-400')">
@@ -637,6 +657,13 @@
                 const sortDesc = ref(true);
 
                 const displayCount = ref(20);
+                const playerSearch = ref('');
+
+                // 換關鍵字時把捲動載入的筆數歸位, 免得從第 200 筆的位置開始切
+                watch(playerSearch, () => {
+                    displayCount.value = 20;
+                });
+
                 const selectedPlayer = ref(null);
                 const showChartModal = ref(false);
 
@@ -1035,6 +1062,35 @@
                     return arr;
                 });
 
+                // 玩家帳號搜尋: 不分大小寫的片段比對, 貼上完整 ACCID 或只記得幾碼都能找
+                const filteredPlayers = computed(() => {
+                    const q = playerSearch.value.trim().toLowerCase();
+                    if (!q) return sortedPlayers.value;
+                    return sortedPlayers.value.filter(p => String(p.account).toLowerCase().includes(q));
+                });
+
+                // 把帳號拆成 [未命中, 命中, 未命中...] 好在表格裡標出比對到的位置
+                const highlightParts = (account) => {
+                    const text = String(account);
+                    const q = playerSearch.value.trim().toLowerCase();
+                    if (!q) return [{ text, hit: false }];
+
+                    const lower = text.toLowerCase();
+                    const parts = [];
+                    let cursor = 0;
+                    while (cursor < text.length) {
+                        const at = lower.indexOf(q, cursor);
+                        if (at === -1) {
+                            parts.push({ text: text.slice(cursor), hit: false });
+                            break;
+                        }
+                        if (at > cursor) parts.push({ text: text.slice(cursor, at), hit: false });
+                        parts.push({ text: text.slice(at, at + q.length), hit: true });
+                        cursor = at + q.length;
+                    }
+                    return parts;
+                };
+
                 const sortBy = (key) => {
                     if (sortKey.value === key) {
                         sortDesc.value = !sortDesc.value;
@@ -1194,6 +1250,7 @@
                     sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
+                    playerSearch, filteredPlayers, highlightParts,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     chartStart, chartEnd, chartMax, renderPlayerChart
