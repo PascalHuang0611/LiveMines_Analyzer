@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.93</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.94</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -228,6 +228,21 @@
             </svg>
             <h2 class="text-2xl font-bold">資料解析中...</h2>
             <p class="text-gray-400 mt-2">已載入 {{ processedFiles }} 個檔案，處理 {{ totalRawRows.toLocaleString() }} 筆注單</p>
+        </div>
+
+        <!-- 匯出重複注單提示 -->
+        <div v-if="!isProcessing && duplicateBills > 0"
+            class="rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed">
+            <span class="text-amber-400 text-lg leading-none mt-0.5">⚠</span>
+            <div class="text-sm">
+                <span class="text-amber-300 font-bold">已略過 {{ duplicateBills.toLocaleString() }} 筆重複注單</span>
+                <span class="text-gray-400">
+                    — 後台匯出分頁時，換頁邊界（NO 每滿一萬）的注單會重複輸出。相同 Bill No 只採計一次，以下統計已排除重複。
+                </span>
+                <div class="text-xs text-gray-500 mt-1">
+                    註：同一個換頁動作也可能造成漏列，漏掉的注單無法從這份檔案還原，需請後台重新匯出。
+                </div>
+            </div>
         </div>
 
         <!-- Dashboard Content (Player Analytics) -->
@@ -617,7 +632,8 @@
                 const gameResultsData = ref([]);
                 const processedFiles = ref(0);
                 const totalRawRows = ref(0);
-                
+                const duplicateBills = ref(0); // 匯出分頁邊界重複、已被略過的注單筆數
+
                 const totalPlayerRounds = ref(0);
 
                 const gridsBetDist = ref({}); // { 1: count, 2: count ... }
@@ -629,26 +645,34 @@
                 const DEFAULT_HIGH_THRESHOLD = 200;
                 const DEFAULT_MID_THRESHOLD = 50;
 
+                // 瀏覽器可能整個擋掉 storage (沙箱 iframe、data: URL、部分隱私模式),
+                // 直接存取會丟 SecurityError 讓 setup() 中斷、整頁空白。設定記憶壞掉可以接受, 整個工具打不開不行。
+                const store = {
+                    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+                    set(key, val) { try { localStorage.setItem(key, val); } catch (e) { /* 忽略: 設定不會被保留 */ } },
+                    remove(key) { try { localStorage.removeItem(key); } catch (e) { /* 同上 */ } }
+                };
+
                 // 預設門檻在 v0.92 從 10000/2000 調整為 200/50 (舊值幾乎會把所有玩家歸到休閒)。
                 // 提高版本號可清掉瀏覽器裡存的舊門檻, 讓新預設值生效一次; 之後使用者自己調的值照常保留。
                 const SETTINGS_VERSION = '2';
-                if (localStorage.getItem('livemines_settings_version') !== SETTINGS_VERSION) {
-                    localStorage.removeItem('livemines_high_threshold');
-                    localStorage.removeItem('livemines_mid_threshold');
-                    localStorage.setItem('livemines_settings_version', SETTINGS_VERSION);
+                if (store.get('livemines_settings_version') !== SETTINGS_VERSION) {
+                    store.remove('livemines_high_threshold');
+                    store.remove('livemines_mid_threshold');
+                    store.set('livemines_settings_version', SETTINGS_VERSION);
                 }
 
-                const savedHigh = parseInt(localStorage.getItem('livemines_high_threshold'));
-                const savedMid = parseInt(localStorage.getItem('livemines_mid_threshold'));
+                const savedHigh = parseInt(store.get('livemines_high_threshold'));
+                const savedMid = parseInt(store.get('livemines_mid_threshold'));
 
                 const highValueThreshold = ref(Number.isFinite(savedHigh) && savedHigh > 0 ? savedHigh : DEFAULT_HIGH_THRESHOLD);
                 const midValueThreshold = ref(Number.isFinite(savedMid) && savedMid > 0 ? savedMid : DEFAULT_MID_THRESHOLD);
 
                 watch(highValueThreshold, (newVal) => {
-                    localStorage.setItem('livemines_high_threshold', newVal);
+                    store.set('livemines_high_threshold', newVal);
                 });
                 watch(midValueThreshold, (newVal) => {
-                    localStorage.setItem('livemines_mid_threshold', newVal);
+                    store.set('livemines_mid_threshold', newVal);
                 });
 
                 const clusterStats = ref({});
@@ -706,9 +730,14 @@
                     const uniquePhysicalGames = {}; // key: GameCode, value: gameResult string
                     const playerAgg = {}; // key: Account
                     let tempGameResults = [];
-                    
+
                     let parsedBills = false;
                     let parsedGames = false;
+
+                    // 後台匯出分頁時, 換頁邊界 (NO 每滿一萬) 的注單會重複輸出 —— 已確認是後台的 BUG。
+                    // 同一張 Bill No 只採計一次, 否則那幾局的流水與派彩會被算兩遍。
+                    const seenBillNos = new Set();
+                    duplicateBills.value = 0;
 
                     for (const file of files) {
                         await new Promise(resolve => {
@@ -732,6 +761,15 @@
                                             const account = row['Account'];
                                             const gameCode = row['Game Code'];
                                             if(!account || !gameCode) return;
+
+                                            const billNo = row['Bill No'];
+                                            if (billNo) {
+                                                if (seenBillNos.has(billNo)) {
+                                                    duplicateBills.value++;
+                                                    return;
+                                                }
+                                                seenBillNos.add(billNo);
+                                            }
                                             
                                             const bet = parseFloat(row['Bet Amount']) || 0;
                                             const payout = parseFloat(row['Payout']) || 0;
@@ -1246,7 +1284,7 @@
 
                 return {
                     activeTab, hasGameData, gameResultsData,
-                    isProcessing, hasData, processedFiles, totalRawRows,
+                    isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
