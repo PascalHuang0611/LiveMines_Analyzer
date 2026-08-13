@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.94</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.95</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -241,6 +241,23 @@
                 </span>
                 <div class="text-xs text-gray-500 mt-1">
                     註：同一個換頁動作也可能造成漏列，漏掉的注單無法從這份檔案還原，需請後台重新匯出。
+                </div>
+            </div>
+        </div>
+
+        <!-- 兩檔時間範圍不一致提示 -->
+        <div v-if="!isProcessing && timeSpanWarning" class="rounded-xl border px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed"
+            :class="timeSpanWarning.severe ? 'border-amber-500/40 bg-amber-500/10' : 'border-sky-500/40 bg-sky-500/10'">
+            <span class="text-lg leading-none mt-0.5" :class="timeSpanWarning.severe ? 'text-amber-400' : 'text-sky-400'">
+                {{ timeSpanWarning.severe ? '⚠' : 'ⓘ' }}
+            </span>
+            <div class="text-sm">
+                <span class="font-bold" :class="timeSpanWarning.severe ? 'text-amber-300' : 'text-sky-300'">兩個 CSV 的時間範圍不一致</span>
+                <span class="text-gray-400">— {{ timeSpanWarning.summary }}。</span>
+                <span v-if="timeSpanWarning.impact" class="text-gray-400">{{ timeSpanWarning.impact }}</span>
+                <div class="text-xs text-gray-500 mt-1 font-mono">
+                    注單 {{ timeSpanWarning.bill.min }} ~ {{ timeSpanWarning.bill.max }}<br>
+                    大盤 {{ timeSpanWarning.game.min }} ~ {{ timeSpanWarning.game.max }}
                 </div>
             </div>
         </div>
@@ -633,6 +650,9 @@
                 const processedFiles = ref(0);
                 const totalRawRows = ref(0);
                 const duplicateBills = ref(0); // 匯出分頁邊界重複、已被略過的注單筆數
+                const billTimeSpan = ref(null); // { min, max } 注單檔涵蓋的時間
+                const gameTimeSpan = ref(null); // { min, max } 大盤檔涵蓋的時間
+                const coverageGap = ref(null);  // { gamesMissingBills, billRoundsMissingGame } 局層級的實際落差
 
                 const totalPlayerRounds = ref(0);
 
@@ -718,6 +738,32 @@
                     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 };
 
+                // 注單是 "2026-08-13 11:28:19", 大盤是 "2026-08-13T11:29:08+08:00"。
+                // 兩邊都取前 19 碼當「牆上時間」比較, 不經過時區換算 —— 否則會跟著看報表的人所在時區跑掉。
+                const wallClock = (raw) => {
+                    if (!raw) return null;
+                    const s = String(raw).trim().replace('T', ' ').slice(0, 19);
+                    return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? s : null;
+                };
+                const trackSpan = (span, raw) => {
+                    const s = wallClock(raw);
+                    if (!s) return;
+                    if (!span.min || s < span.min) span.min = s;   // 格式固定, 字串比較即等同時間比較
+                    if (!span.max || s > span.max) span.max = s;
+                };
+                const wallClockMs = (s) => {
+                    const m = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+                    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
+                };
+                const formatGap = (ms) => {
+                    const sec = Math.round(Math.abs(ms) / 1000);
+                    if (sec < 60) return sec + ' 秒';
+                    if (sec < 3600) return Math.round(sec / 60) + ' 分鐘';
+                    const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+                    if (sec < 86400) return m ? `${h} 小時 ${m} 分` : `${h} 小時`;
+                    return (sec / 86400).toFixed(1) + ' 天';
+                };
+
                 const handleFileSelect = async (event) => {
                     const files = Array.from(event.target.files).filter(f => f.name.endsWith('.csv'));
                     if (files.length === 0) return;
@@ -739,6 +785,10 @@
                     const seenBillNos = new Set();
                     duplicateBills.value = 0;
 
+                    // 兩個 CSV 是分別撈的, 時間範圍常常對不齊。這裡只記錄各自的頭尾, 載入完再比對。
+                    const billSpan = { min: null, max: null };
+                    const gameSpan = { min: null, max: null };
+
                     for (const file of files) {
                         await new Promise(resolve => {
                             Papa.parse(file, {
@@ -751,8 +801,9 @@
                                     if (headers.includes('Risk Control') && headers.includes('Jackpot Pool')) {
                                         totalRawRows.value += results.data.length;
                                         tempGameResults = tempGameResults.concat(results.data);
+                                        results.data.forEach(row => trackSpan(gameSpan, row['Start Time']));
                                         parsedGames = true;
-                                    } 
+                                    }
                                     // Check if it's bill_records
                                     else if (headers.includes('Account') && headers.includes('Bet Amount')) {
                                         totalRawRows.value += results.data.length;
@@ -770,7 +821,9 @@
                                                 }
                                                 seenBillNos.add(billNo);
                                             }
-                                            
+
+                                            trackSpan(billSpan, row['Bill Time']);
+
                                             const bet = parseFloat(row['Bet Amount']) || 0;
                                             const payout = parseFloat(row['Payout']) || 0;
                                             const wl = parseFloat(row['Member Win/Loss']) || 0;
@@ -859,6 +912,30 @@
                             });
                         });
                         processedFiles.value++;
+                    }
+
+                    billTimeSpan.value = billSpan.min ? { ...billSpan } : null;
+                    gameTimeSpan.value = gameSpan.min ? { ...gameSpan } : null;
+
+                    // 時間範圍差多少只是表象 —— Bill Time 是結算時間, 有可能比開局晚很久。
+                    // 真正要問的是「有沒有哪一局漏掉」, 所以用 Game Code 對一遍。
+                    if (parsedBills && parsedGames) {
+                        const billGameCodes = new Set(Object.keys(uniquePhysicalGames));
+                        const resultGameCodes = new Set(tempGameResults.map(r => r['Game Code']));
+                        let gamesMissingBills = 0;
+                        tempGameResults.forEach(r => {
+                            // 沒有人下注的局本來就不會有注單, 不算落差
+                            if (r['Game Status'] !== 'Approved') return;
+                            if ((parseFloat(r['Bet Amount']) || 0) <= 0) return;
+                            if (!billGameCodes.has(r['Game Code'])) gamesMissingBills++;
+                        });
+                        let billRoundsMissingGame = 0;
+                        billGameCodes.forEach(code => {
+                            if (!resultGameCodes.has(code)) billRoundsMissingGame++;
+                        });
+                        coverageGap.value = { gamesMissingBills, billRoundsMissingGame };
+                    } else {
+                        coverageGap.value = null;
                     }
 
                     if (parsedGames) {
@@ -1100,6 +1177,37 @@
                     return arr;
                 });
 
+                // 兩份 CSV 是分開撈的, 頭尾差幾分鐘算正常; 差太多就代表有一邊的資料沒涵蓋到,
+                // 交叉比對(例如拿大盤投注對注單加總)會失真。只提示、不擋操作。
+                const TIME_GAP_TOLERANCE_MS = 5 * 60 * 1000;
+                const timeSpanWarning = computed(() => {
+                    const b = billTimeSpan.value, g = gameTimeSpan.value;
+                    if (!b || !g) return null; // 只載入其中一種檔案時不比對
+
+                    const startGap = wallClockMs(b.min) - wallClockMs(g.min);
+                    const endGap = wallClockMs(b.max) - wallClockMs(g.max);
+                    if (Math.abs(startGap) <= TIME_GAP_TOLERANCE_MS && Math.abs(endGap) <= TIME_GAP_TOLERANCE_MS) return null;
+
+                    const side = (gap) => gap > 0 ? `注單晚了 ${formatGap(gap)}` : `大盤晚了 ${formatGap(gap)}`;
+                    const parts = [];
+                    if (Math.abs(startGap) > TIME_GAP_TOLERANCE_MS) parts.push('起點 ' + side(startGap));
+                    if (Math.abs(endGap) > TIME_GAP_TOLERANCE_MS) parts.push('終點 ' + side(endGap));
+
+                    // 判斷這個時間差有沒有真的造成資料落差
+                    const cov = coverageGap.value;
+                    let impact = null, severe = false;
+                    if (cov) {
+                        const bits = [];
+                        if (cov.gamesMissingBills > 0) bits.push(`${cov.gamesMissingBills} 局有投注但缺注單`);
+                        if (cov.billRoundsMissingGame > 0) bits.push(`${cov.billRoundsMissingGame} 局有注單但缺賽果`);
+                        severe = bits.length > 0;
+                        impact = severe
+                            ? '實際落差：' + bits.join('、') + '，這些局的交叉比對會失真。'
+                            : '不過逐局比對後，兩邊沒有任何一局漏掉（Bill Time 是結算時間，可能比開局晚，時間差不代表資料缺漏）。';
+                    }
+                    return { bill: b, game: g, summary: parts.join('、'), impact, severe };
+                });
+
                 // 玩家帳號搜尋: 不分大小寫的片段比對, 貼上完整 ACCID 或只記得幾碼都能找
                 const filteredPlayers = computed(() => {
                     const q = playerSearch.value.trim().toLowerCase();
@@ -1285,6 +1393,7 @@
                 return {
                     activeTab, hasGameData, gameResultsData,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
+                    timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
