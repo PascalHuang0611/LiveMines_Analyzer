@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.95</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.96</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -619,10 +619,215 @@
 
         <!-- Dashboard Content (House Analytics) -->
         <div v-if="!isProcessing && hasGameData && activeTab === 'house'" class="space-y-6 animate-fade-in-delayed">
-            <div class="glass rounded-2xl p-6 text-center">
-                <h2 class="text-2xl font-bold text-indigo-300">大盤分析功能開發中...</h2>
-                <p class="text-gray-400 mt-2">已成功解析 {{ gameResultsData.length }} 局大盤資料</p>
+            <div v-if="!houseStats" class="glass rounded-2xl p-12 text-center">
+                <h2 class="text-2xl font-bold text-gray-500">這份大盤資料裡沒有任何已結算且有投注的局</h2>
             </div>
+
+            <template v-else>
+                <!-- ===== A. 這期賺不賺錢 ===== -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-1">營收表現</h3>
+                    <p class="text-sm text-gray-400 mb-5">
+                        {{ houseStats.rounds.toLocaleString() }} 局有效局，涵蓋 {{ houseStats.spanHours.toFixed(1) }} 小時
+                        <span v-if="houseStats.emptyRounds" class="text-gray-500">（另有 {{ houseStats.emptyRounds }} 局無人下注、{{ houseStats.pending }} 局未結算，未列入計算）</span>
+                    </p>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                            <div class="text-xs text-gray-500 mb-1">總投注</div>
+                            <div class="text-2xl font-bold text-white">{{ fmtInt(houseStats.bet) }}</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                            <div class="text-xs text-gray-500 mb-1">總派彩</div>
+                            <div class="text-2xl font-bold text-gray-300">{{ fmtInt(houseStats.payout) }}</div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-indigo-500/30">
+                            <div class="text-xs text-gray-500 mb-1">毛利 (GGR)</div>
+                            <div class="text-2xl font-bold" :class="houseStats.ggr >= 0 ? 'text-green-400' : 'text-red-400'">
+                                {{ fmtInt(houseStats.ggr) }}
+                            </div>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5 cursor-help"
+                            :title="`RTP = 總派彩 / 總投注\nhold = 平台實際留成比例`">
+                            <div class="text-xs text-gray-500 mb-1">RTP ／ hold</div>
+                            <div class="text-2xl font-bold text-yellow-400">{{ houseStats.rtp.toFixed(2) }}%</div>
+                            <div class="text-xs text-gray-400">留成 {{ houseStats.hold.toFixed(2) }}%</div>
+                        </div>
+                    </div>
+
+                    <!-- 可信度警語: 毛利可能是負的, 兩種情境的講法完全不同 -->
+                    <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-6">
+                        <div class="text-amber-300 font-bold text-sm mb-2">這個毛利有多脆弱？</div>
+                        <p v-if="houseStats.ggr > 0 && houseStats.ggrDrop1 > 0" class="text-sm text-gray-300 leading-relaxed">
+                            只要拿掉最賠的 <span class="font-bold text-white">1 局</span>，毛利就從
+                            <span class="font-bold text-white">{{ fmtInt(houseStats.ggr) }}</span> 變成
+                            <span class="font-bold text-amber-300">{{ fmtInt(houseStats.ggrDrop1) }}</span>。
+                            換句話說，本期有
+                            <span class="font-bold text-amber-300">{{ ((1 - houseStats.ggr / houseStats.ggrDrop1) * 100).toFixed(0) }}%</span>
+                            的潛在毛利是被單獨一局吃掉的。
+                        </p>
+                        <p v-else-if="houseStats.ggrDrop1 > 0" class="text-sm text-gray-300 leading-relaxed">
+                            本期整體是<span class="font-bold text-red-400">虧損 {{ fmtInt(-houseStats.ggr) }}</span>，
+                            但拿掉最賠的 <span class="font-bold text-white">1 局</span>之後就轉為
+                            <span class="font-bold text-green-400">獲利 {{ fmtInt(houseStats.ggrDrop1) }}</span>
+                            —— 整期的虧損完全來自這一局。
+                        </p>
+                        <p v-else class="text-sm text-gray-300 leading-relaxed">
+                            本期整體是<span class="font-bold text-red-400">虧損 {{ fmtInt(-houseStats.ggr) }}</span>，
+                            即使拿掉最賠的 1 局仍虧
+                            <span class="font-bold text-red-400">{{ fmtInt(-houseStats.ggrDrop1) }}</span>、
+                            拿掉最賠的 10 局仍虧
+                            <span class="font-bold text-red-400">{{ fmtInt(-houseStats.ggrDrop10) }}</span>。
+                            這不是單一事件造成的，是整體結果偏離。
+                        </p>
+                        <p class="text-xs text-gray-500 mt-2">
+                            最賠的一局：{{ houseStats.worstOne.code }}（{{ houseStats.worstOne.time }}），投注
+                            {{ fmtInt(houseStats.worstOne.bet) }} 賠出 {{ fmtInt(houseStats.worstOne.payout) }}，淨損
+                            {{ fmtInt(-houseStats.worstOne.ggr) }}
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-300 mb-1">毛利有多集中在少數幾局</h4>
+                            <p class="text-xs text-gray-500 mb-3">橫軸：拿掉最賠的前 N 局。線爬得越陡，代表損益越被少數幾局綁架。</p>
+                            <div class="h-64"><canvas id="houseTailChart"></canvas></div>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-300 mb-1">這個 RTP 要跑多久才穩定</h4>
+                            <p class="text-xs text-gray-500 mb-3">
+                                第 {{ houseStats.midPoint.i.toLocaleString() }} 局時累積 RTP 是
+                                <span class="font-bold" :class="houseStats.midPoint.ggr < 0 ? 'text-red-400' : 'text-green-400'">{{ houseStats.midPoint.rtp.toFixed(2) }}%</span>
+                                （累積毛利 {{ fmtInt(houseStats.midPoint.ggr) }}）
+                                <span v-if="houseStats.settleAt">，要到第 {{ houseStats.settleAt.toLocaleString() }} 局才穩定在最終值 ±1pp 內</span>。
+                            </p>
+                            <div class="h-64"><canvas id="houseRtpChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== C. 遊戲功能的成本 ===== -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-1">功能成本</h3>
+                    <p class="text-sm text-gray-400 mb-5">哪些機制在吃毛利，以及還有多少錢掛在帳上沒發出去。</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
+                            <div class="flex items-baseline justify-between mb-3">
+                                <span class="font-bold text-white">BG（獎勵遊戲）</span>
+                                <span class="text-xs text-gray-400">{{ houseStats.bgRounds }} / {{ houseStats.rounds.toLocaleString() }} 局觸發（{{ (houseStats.bgRounds / houseStats.rounds * 100).toFixed(2) }}%）</span>
+                            </div>
+                            <p class="text-sm text-gray-300 leading-relaxed">
+                                BG 只在 <span class="font-bold text-white">{{ (houseStats.bgRounds / houseStats.rounds * 100).toFixed(2) }}%</span> 的局觸發，
+                                卻讓毛利從 <span class="font-bold text-gray-400">{{ fmtInt(houseStats.ggrWithoutBg) }}</span>
+                                掉到 <span class="font-bold text-white">{{ fmtInt(houseStats.ggr) }}</span><span v-if="houseStats.ggrWithoutBg > 0">
+                                    —
+                                    <span class="font-bold text-red-400">吃掉 {{ (houseStats.bgWin / houseStats.ggrWithoutBg * 100).toFixed(0) }}%</span></span>。
+                            </p>
+                            <p class="text-xs text-gray-500 mt-2">觸發率是少數幾個能直接調的旋鈕之一，調動 0.5% 就是六位數的毛利差異。</p>
+                            <table class="w-full text-xs mt-4">
+                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
+                                    <th class="py-1">單筆最大 BG</th><th class="py-1 text-right">投注</th><th class="py-1 text-right">BG 派彩</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="b in houseStats.bgTopRounds" :key="b.code" class="border-b border-white/5">
+                                        <td class="py-1 text-gray-400">{{ b.code }}</td>
+                                        <td class="py-1 text-right text-gray-400">{{ fmtInt(b.bet) }}</td>
+                                        <td class="py-1 text-right font-bold text-red-400">{{ fmtInt(b.bg) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="bg-slate-800/50 rounded-xl p-5 border" :class="houseStats.jpHits === 0 ? 'border-amber-500/40' : 'border-white/5'">
+                            <div class="flex items-baseline justify-between mb-3">
+                                <span class="font-bold text-white">Jackpot（累積獎池）</span>
+                                <span class="text-xs" :class="houseStats.jpHits === 0 ? 'text-amber-400' : 'text-gray-400'">
+                                    觀測期內命中 {{ houseStats.jpHits }} 次
+                                </span>
+                            </div>
+                            <div class="text-3xl font-bold text-amber-300 mb-1">{{ fmtInt(houseStats.poolNow) }}</div>
+                            <div class="text-xs text-gray-500 mb-3">期末獎池餘額</div>
+                            <p v-if="houseStats.jpHits === 0" class="text-sm text-gray-300 leading-relaxed">
+                                <template v-if="houseStats.ggr > 0">
+                                    獎池已累積到期間毛利的
+                                    <span class="font-bold text-amber-300">{{ (houseStats.poolNow / houseStats.ggr).toFixed(2) }} 倍</span>，
+                                    而
+                                </template>
+                                <template v-else>獎池持續累積，而</template>
+                                觀測期內一次都沒有開出。這是一筆掛在帳上、隨時會兌現的負債，
+                                不是已實現的收益。
+                            </p>
+                            <p v-else class="text-sm text-gray-300">觀測期內命中 {{ houseStats.jpHits }} 次。</p>
+                            <p class="text-xs text-gray-500 mt-2">
+                                建議跟開發確認提撥來源：獎池成長率不是固定值，可能有其他房間一起貢獻。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== D. 成長槓桿 ===== -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-1">成長槓桿</h3>
+                    <p class="text-sm text-gray-400 mb-5">目前流失最多、也最有機會撿回來的兩個地方。</p>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
+                            <div class="font-bold text-white mb-4">在場的人有多少真的下注</div>
+                            <div class="space-y-3">
+                                <div v-for="s in [
+                                        { label: '局末在場人次', val: houseStats.endtime, base: houseStats.endtime, color: 'bg-indigo-500' },
+                                        { label: '下注時段在場人次', val: houseStats.bettime, base: houseStats.endtime, color: 'bg-cyan-500' },
+                                        { label: '實際下注人次', val: houseStats.betPlayer, base: houseStats.endtime, color: 'bg-emerald-500' }
+                                    ]" :key="s.label">
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="text-gray-400">{{ s.label }}</span>
+                                        <span class="text-white font-bold">{{ s.val.toLocaleString() }}
+                                            <span class="text-gray-500 font-normal">（{{ (s.val / s.base * 100).toFixed(1) }}%）</span>
+                                        </span>
+                                    </div>
+                                    <div class="h-2.5 bg-slate-900 rounded-full overflow-hidden">
+                                        <div class="h-full rounded-full" :class="s.color" :style="{ width: (s.val / s.base * 100) + '%' }"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-300 mt-4 leading-relaxed">
+                                人幾乎沒有在中途離開（{{ (houseStats.bettime / houseStats.endtime * 100).toFixed(1) }}% 留到下注時段），
+                                流失<span class="font-bold text-white">全部集中在「在場卻不下注」</span>這一步 —
+                                只有 <span class="font-bold text-emerald-400">{{ (houseStats.betPlayer / houseStats.bettime * 100).toFixed(1) }}%</span> 真的出手。
+                                留人沒問題，轉化才是問題。
+                            </p>
+                            <p class="text-xs text-gray-500 mt-2">
+                                註：此比例偏樂觀。「下注人次」的官方定義包含 0 元參與者，真實轉化率會更低。
+                            </p>
+                        </div>
+
+                        <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
+                            <div class="font-bold text-white mb-1">被長局卡住的時間</div>
+                            <p class="text-xs text-gray-500 mb-4">一般一局 {{ Math.round(houseStats.medianDur) }} 秒；下列各局遠超此值，期間開不了新局。</p>
+                            <div class="text-3xl font-bold text-white mb-1">{{ fmtHours(houseStats.lostSeconds) }}</div>
+                            <div class="text-xs text-gray-500 mb-4">
+                                {{ houseStats.longCount }} 局異常長，合計佔掉 {{ (houseStats.lostSeconds / 3600 / houseStats.spanHours * 100).toFixed(1) }}% 的營運時間
+                            </div>
+                            <table class="w-full text-xs">
+                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
+                                    <th class="py-1">局號</th><th class="py-1">開始時間</th><th class="py-1 text-right">時長</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="d in houseStats.longRounds" :key="d.code" class="border-b border-white/5">
+                                        <td class="py-1 text-gray-400">{{ d.code }}</td>
+                                        <td class="py-1 text-gray-500">{{ d.time }}</td>
+                                        <td class="py-1 text-right font-bold text-amber-400">{{ fmtHours(d.sec) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p class="text-xs text-gray-500 mt-3">
+                                這不是機器停機 — 局與局之間的銜接一直是正常的。要問的是「為什麼有局會跑這麼久」。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
         </div>
 
         <!-- Empty State -->
@@ -728,6 +933,8 @@
 
                 let gridsChartInstance = null;
                 let playerChartInstance = null;
+                let houseTailChartInstance = null;
+                let houseRtpChartInstance = null;
                 let chartCache = null;
 
                 const chartStart = ref(1);
@@ -1069,6 +1276,103 @@
                     computeClusters();
                 };
 
+                const AXIS = { color: '#94a3b8' };
+                const GRID = { color: 'rgba(255, 255, 255, 0.1)' };
+
+                const renderHouseCharts = () => {
+                    const s = houseStats.value;
+                    if (!s) return;
+
+                    const tailEl = document.getElementById('houseTailChart');
+                    if (tailEl) {
+                        if (houseTailChartInstance) houseTailChartInstance.destroy();
+                        houseTailChartInstance = new Chart(tailEl, {
+                            type: 'line',
+                            data: {
+                                labels: s.tailCurve.map(p => p.n),
+                                datasets: [{
+                                    label: '剩餘毛利',
+                                    data: s.tailCurve.map(p => Math.round(p.ggr)),
+                                    borderColor: 'rgba(52, 211, 153, 1)',
+                                    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+                                    fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: { callbacks: {
+                                        title: (c) => `拿掉最賠的 ${c[0].label} 局`,
+                                        label: (c) => `毛利 ${c.parsed.y.toLocaleString()}（原值的 ${(c.parsed.y / s.ggr * 100).toFixed(0)}%）`
+                                    } }
+                                },
+                                scales: {
+                                    y: { grid: GRID, ticks: { color: AXIS.color,
+                                         // 金額量級差很多, 小數字直接顯示比硬湊成 "0k" 清楚
+                                         callback: (v) => Math.abs(v) >= 10000 ? (v / 1000).toFixed(0) + 'k' : v.toLocaleString() } },
+                                    x: { grid: { display: false }, ticks: { color: AXIS.color, maxTicksLimit: 11 },
+                                         title: { display: true, text: '拿掉最賠的前 N 局', color: '#64748b', font: { size: 10 } } }
+                                }
+                            }
+                        });
+                    }
+
+                    const rtpEl = document.getElementById('houseRtpChart');
+                    if (rtpEl) {
+                        if (houseRtpChartInstance) houseRtpChartInstance.destroy();
+                        // 2,800+ 個點畫出來只是浪費, 每隔幾局取一個就夠看趨勢
+                        const step = Math.max(1, Math.floor(s.cumulative.length / 400));
+                        const pts = s.cumulative.filter((_, i) => i % step === 0 || i === s.cumulative.length - 1);
+                        rtpEl.__final = s.rtp;
+                        houseRtpChartInstance = new Chart(rtpEl, {
+                            type: 'line',
+                            data: {
+                                labels: pts.map(p => p.i),
+                                datasets: [
+                                    {
+                                        label: '累積 RTP',
+                                        data: pts.map(p => p.rtp),
+                                        borderColor: 'rgba(250, 204, 21, 1)',
+                                        backgroundColor: 'rgba(250, 204, 21, 0.08)',
+                                        fill: false, tension: 0.2, pointRadius: 0, borderWidth: 2
+                                    },
+                                    {
+                                        label: '最終值',
+                                        data: pts.map(() => s.rtp),
+                                        borderColor: 'rgba(148, 163, 184, 0.7)',
+                                        borderDash: [5, 5], pointRadius: 0, borderWidth: 1, fill: false
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: { callbacks: {
+                                        title: (c) => `第 ${c[0].label} 局`,
+                                        label: (c) => c.datasetIndex === 0
+                                            ? `累積 RTP ${c.parsed.y.toFixed(2)}%`
+                                            : `最終值 ${s.rtp.toFixed(2)}%`
+                                    } }
+                                },
+                                scales: {
+                                    // 早期幾局的累積 RTP 會非常極端, 全部畫進去會把後面壓成一條直線
+                                    y: { min: Math.max(60, s.rtp - 30), max: s.rtp + 30,
+                                         grid: GRID, ticks: { color: AXIS.color, callback: (v) => v + '%' } },
+                                    x: { grid: { display: false }, ticks: { color: AXIS.color, maxTicksLimit: 8 },
+                                         title: { display: true, text: '累積局數', color: '#64748b', font: { size: 10 } } }
+                                }
+                            }
+                        });
+                    }
+                };
+
+                // 切到大盤頁時 canvas 才會存在, 要等 DOM 更新後再畫
+                watch([activeTab, hasGameData], ([tab, ready]) => {
+                    if (tab === 'house' && ready) nextTick(renderHouseCharts);
+                });
+
                 const renderChart = () => {
                     const ctx = document.getElementById('gridsBetChart');
                     if(!ctx) return;
@@ -1207,6 +1511,113 @@
                     }
                     return { bill: b, game: g, summary: parts.join('、'), impact, severe };
                 });
+
+                // ===== 大盤分析 (只吃 game_results, 不與注單檔交叉) =====
+                const houseStats = computed(() => {
+                    const raw = gameResultsData.value || [];
+                    if (!raw.length) return null;
+                    const n = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
+
+                    // 未結算的局金額全為 0, 混進來只會稀釋每局平均
+                    const approved = raw.filter(r => r['Game Status'] === 'Approved');
+                    // 再排掉「開了但沒人下注」的空局 —— 它們不是營運結果, 只會拉低每局均值
+                    const active = approved.filter(r => n(r['Bet Amount']) > 0);
+                    if (!active.length) return null;
+
+                    const byTime = [...active].sort((a, b) => new Date(a['Start Time']) - new Date(b['Start Time']));
+
+                    const bet = active.reduce((s, r) => s + n(r['Bet Amount']), 0);
+                    const payout = active.reduce((s, r) => s + n(r['Total Win']), 0);
+                    const ggr = bet - payout;
+                    const bgWin = active.reduce((s, r) => s + n(r['BG Win']), 0);
+                    const mgWin = active.reduce((s, r) => s + n(r['MG Win']), 0);
+
+                    // --- 尾部風險: 少數幾局決定整期損益 ---
+                    const perRound = byTime.map(r => ({
+                        code: r['Game Code'],
+                        time: String(r['Start Time']).replace('T', ' ').slice(0, 19),
+                        bet: n(r['Bet Amount']),
+                        payout: n(r['Total Win']),
+                        bg: n(r['BG Win']),
+                        players: n(r['Bet Player']),
+                        ggr: n(r['Bet Amount']) - n(r['Total Win'])
+                    }));
+                    const worstFirst = [...perRound].sort((a, b) => a.ggr - b.ggr);
+                    const tailCurve = [];
+                    let removed = 0;
+                    for (let i = 0; i <= Math.min(50, worstFirst.length - 1); i++) {
+                        if (i > 0) removed += worstFirst[i - 1].ggr;
+                        tailCurve.push({ n: i, ggr: ggr - removed });
+                    }
+                    const worstOne = worstFirst[0];
+
+                    // --- 累積 RTP: 說明「這個數字要跑多久才穩」 ---
+                    const cumulative = [];
+                    let cb = 0, cw = 0;
+                    byTime.forEach((r, i) => {
+                        cb += n(r['Bet Amount']); cw += n(r['Total Win']);
+                        cumulative.push({ i: i + 1, rtp: cb > 0 ? cw / cb * 100 : 0, ggr: cb - cw });
+                    });
+                    const finalRtp = bet > 0 ? payout / bet * 100 : 0;
+                    // 從最後往前找第一個偏離最終值超過 1pp 的位置 = 收斂點
+                    let settleAt = null;
+                    for (let i = cumulative.length - 1; i >= 0; i--) {
+                        if (Math.abs(cumulative[i].rtp - finalRtp) > 1) { settleAt = i + 2; break; }
+                    }
+                    const midPoint = cumulative[Math.min(999, cumulative.length - 1)];
+
+                    // --- 參與轉換 ---
+                    const endtime = approved.reduce((s, r) => s + n(r['Endtime Players']), 0);
+                    const bettime = approved.reduce((s, r) => s + n(r['Bettime Players']), 0);
+                    const betPlayer = approved.reduce((s, r) => s + n(r['Bet Player']), 0);
+
+                    // --- 節奏: 長局會卡住開局, 是可回收的營收缺口 ---
+                    const durations = [];
+                    byTime.forEach(r => {
+                        if (!r['End Time']) return;
+                        const d = (new Date(r['End Time']) - new Date(r['Start Time'])) / 1000;
+                        if (d > 0) durations.push({ code: r['Game Code'], time: String(r['Start Time']).replace('T', ' ').slice(0, 19), sec: d });
+                    });
+                    durations.sort((a, b) => a.sec - b.sec);
+                    const medianDur = durations.length ? durations[Math.floor(durations.length / 2)].sec : 0;
+                    const longRounds = durations.filter(d => d.sec > medianDur * 10).reverse();
+                    const lostSeconds = longRounds.reduce((s, d) => s + (d.sec - medianDur), 0);
+
+                    const spanMs = new Date(byTime[byTime.length - 1]['Start Time']) - new Date(byTime[0]['Start Time']);
+                    const spanHours = spanMs / 3600000;
+
+                    // --- Jackpot: 獎池是負債, 命中與否對 PM 的意義完全不同 ---
+                    const poolNow = n(byTime[byTime.length - 1]['Jackpot Pool']);
+                    const jpHits = approved.filter(r => n(r['JP Win']) > 0).length;
+
+                    const bgRounds = active.filter(r => n(r['BG Win']) > 0);
+
+                    return {
+                        bet, payout, ggr, rtp: finalRtp, hold: bet > 0 ? ggr / bet * 100 : 0,
+                        rounds: active.length, emptyRounds: approved.length - active.length,
+                        pending: raw.length - approved.length,
+                        spanHours,
+                        mgWin, bgWin,
+                        bgRounds: bgRounds.length,
+                        bgTopRounds: [...bgRounds].sort((a, b) => n(b['BG Win']) - n(a['BG Win'])).slice(0, 5).map(r => ({
+                            code: r['Game Code'], bet: n(r['Bet Amount']), bg: n(r['BG Win']), total: n(r['Total Win'])
+                        })),
+                        ggrWithoutBg: ggr + bgWin,
+                        poolNow, jpHits,
+                        tailCurve, worstOne, worstList: worstFirst.slice(0, 5),
+                        ggrDrop1: tailCurve[1] ? tailCurve[1].ggr : ggr,
+                        ggrDrop10: tailCurve[10] ? tailCurve[10].ggr : ggr,
+                        cumulative, settleAt, midPoint,
+                        endtime, bettime, betPlayer,
+                        medianDur, longRounds: longRounds.slice(0, 5), longCount: longRounds.length, lostSeconds
+                    };
+                });
+
+                const fmtInt = (v) => Math.round(v).toLocaleString();
+                const fmtHours = (sec) => {
+                    const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+                    return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`;
+                };
 
                 // 玩家帳號搜尋: 不分大小寫的片段比對, 貼上完整 ACCID 或只記得幾碼都能找
                 const filteredPlayers = computed(() => {
@@ -1392,6 +1803,7 @@
 
                 return {
                     activeTab, hasGameData, gameResultsData,
+                    houseStats, fmtInt, fmtHours,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
