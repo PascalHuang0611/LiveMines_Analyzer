@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.96</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.97</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -776,35 +776,43 @@
                             <div class="font-bold text-white mb-4">在場的人有多少真的下注</div>
                             <div class="space-y-3">
                                 <div v-for="s in [
-                                        { label: '局末在場人次', val: houseStats.endtime, base: houseStats.endtime, color: 'bg-indigo-500' },
-                                        { label: '下注時段在場人次', val: houseStats.bettime, base: houseStats.endtime, color: 'bg-cyan-500' },
-                                        { label: '實際下注人次', val: houseStats.betPlayer, base: houseStats.endtime, color: 'bg-emerald-500' }
+                                        { label: '下注時段在場人次', val: houseStats.bettime, color: 'bg-cyan-500' },
+                                        { label: '其中實際下注人次', val: houseStats.betPlayer, color: 'bg-emerald-500' }
                                     ]" :key="s.label">
                                     <div class="flex justify-between text-xs mb-1">
                                         <span class="text-gray-400">{{ s.label }}</span>
                                         <span class="text-white font-bold">{{ s.val.toLocaleString() }}
-                                            <span class="text-gray-500 font-normal">（{{ (s.val / s.base * 100).toFixed(1) }}%）</span>
+                                            <span class="text-gray-500 font-normal">（{{ (s.val / houseStats.bettime * 100).toFixed(1) }}%）</span>
                                         </span>
                                     </div>
                                     <div class="h-2.5 bg-slate-900 rounded-full overflow-hidden">
-                                        <div class="h-full rounded-full" :class="s.color" :style="{ width: (s.val / s.base * 100) + '%' }"></div>
+                                        <div class="h-full rounded-full" :class="s.color" :style="{ width: (s.val / houseStats.bettime * 100) + '%' }"></div>
                                     </div>
                                 </div>
                             </div>
                             <p class="text-sm text-gray-300 mt-4 leading-relaxed">
-                                人幾乎沒有在中途離開（{{ (houseStats.bettime / houseStats.endtime * 100).toFixed(1) }}% 留到下注時段），
-                                流失<span class="font-bold text-white">全部集中在「在場卻不下注」</span>這一步 —
-                                只有 <span class="font-bold text-emerald-400">{{ (houseStats.betPlayer / houseStats.bettime * 100).toFixed(1) }}%</span> 真的出手。
-                                留人沒問題，轉化才是問題。
+                                下注時段在場的人裡，只有
+                                <span class="font-bold text-emerald-400">{{ (houseStats.betPlayer / houseStats.bettime * 100).toFixed(1) }}%</span>
+                                真的出手 —— 每局中位數是
+                                <span class="font-bold text-white">{{ houseStats.convMedian.toFixed(0) }}%</span>。
+                                人進得來，轉化才是問題。
                             </p>
-                            <p class="text-xs text-gray-500 mt-2">
-                                註：此比例偏樂觀。「下注人次」的官方定義包含 0 元參與者，真實轉化率會更低。
+                            <p class="text-xs text-gray-500 mt-2 leading-relaxed">
+                                註：實際數字比這更低。「下注人次」的官方定義含 0 元參與者
+                                （{{ houseStats.zeroBetRounds }} 局投注額為 0 卻仍記有下注人數）。
+                                另外「局末在場人次」未列入 —— 它與下注時段在場人次有
+                                {{ (houseStats.snapshotMismatch / houseStats.approvedRounds * 100).toFixed(0) }}% 的局呈反向，
+                                是兩個不同時點的快照而非同一批人的前後變化，不能當漏斗層級看。
                             </p>
                         </div>
 
                         <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
                             <div class="font-bold text-white mb-1">被長局卡住的時間</div>
                             <p class="text-xs text-gray-500 mb-4">一般一局 {{ Math.round(houseStats.medianDur) }} 秒；下列各局遠超此值，期間開不了新局。</p>
+                            <div v-if="!houseStats.longCount" class="text-sm text-green-400 py-4">
+                                沒有異常長的局，開局節奏正常。
+                            </div>
+                            <template v-else>
                             <div class="text-3xl font-bold text-white mb-1">{{ fmtHours(houseStats.lostSeconds) }}</div>
                             <div class="text-xs text-gray-500 mb-4">
                                 {{ houseStats.longCount }} 局異常長，合計佔掉 {{ (houseStats.lostSeconds / 3600 / houseStats.spanHours * 100).toFixed(1) }}% 的營運時間
@@ -821,7 +829,8 @@
                                     </tr>
                                 </tbody>
                             </table>
-                            <p class="text-xs text-gray-500 mt-3">
+                            </template>
+                            <p v-if="houseStats.longCount" class="text-xs text-gray-500 mt-3">
                                 這不是機器停機 — 局與局之間的銜接一直是正常的。要問的是「為什麼有局會跑這麼久」。
                             </p>
                         </div>
@@ -1368,11 +1377,6 @@
                     }
                 };
 
-                // 切到大盤頁時 canvas 才會存在, 要等 DOM 更新後再畫
-                watch([activeTab, hasGameData], ([tab, ready]) => {
-                    if (tab === 'house' && ready) nextTick(renderHouseCharts);
-                });
-
                 const renderChart = () => {
                     const ctx = document.getElementById('gridsBetChart');
                     if(!ctx) return;
@@ -1430,6 +1434,13 @@
                         }
                     });
                 };
+
+                // 分頁是 v-if 切換的, 離開時 canvas 連同整個區塊被銷毀, 切回來是一張全新的空 canvas。
+                // 兩邊的圖都要在切回來時重畫, 否則圖表會憑空消失。
+                watch([activeTab, hasData, hasGameData], ([tab, billReady, gameReady]) => {
+                    if (tab === 'player' && billReady) nextTick(renderChart);
+                    if (tab === 'house' && gameReady) nextTick(renderHouseCharts);
+                });
 
                 const getHeatCount = (index) => {
                     return hotzoneMode.value === 'ball' ? ballCounts.value[index-1] : lightningCounts.value[index-1];
@@ -1567,9 +1578,16 @@
                     const midPoint = cumulative[Math.min(999, cumulative.length - 1)];
 
                     // --- 參與轉換 ---
-                    const endtime = approved.reduce((s, r) => s + n(r['Endtime Players']), 0);
+                    // 只有「下注人次 ⊆ 下注時段在場人次」這層站得住 (實測零例外)。
+                    // 局末在場人次不能當漏斗上層 —— 它有相當比例的局反而比下注時段還少, 是兩個時點的快照。
                     const bettime = approved.reduce((s, r) => s + n(r['Bettime Players']), 0);
                     const betPlayer = approved.reduce((s, r) => s + n(r['Bet Player']), 0);
+                    const snapshotMismatch = approved.filter(r => n(r['Bettime Players']) > n(r['Endtime Players'])).length;
+                    const zeroBetRounds = approved.filter(r => n(r['Bet Amount']) === 0 && n(r['Bet Player']) > 0).length;
+                    const convRates = approved.filter(r => n(r['Bettime Players']) > 0)
+                        .map(r => n(r['Bet Player']) / n(r['Bettime Players']) * 100)
+                        .sort((a, b) => a - b);
+                    const convMedian = convRates.length ? convRates[Math.floor(convRates.length / 2)] : 0;
 
                     // --- 節奏: 長局會卡住開局, 是可回收的營收缺口 ---
                     const durations = [];
@@ -1608,7 +1626,8 @@
                         ggrDrop1: tailCurve[1] ? tailCurve[1].ggr : ggr,
                         ggrDrop10: tailCurve[10] ? tailCurve[10].ggr : ggr,
                         cumulative, settleAt, midPoint,
-                        endtime, bettime, betPlayer,
+                        bettime, betPlayer, convMedian, snapshotMismatch, zeroBetRounds,
+                        approvedRounds: approved.length,
                         medianDur, longRounds: longRounds.slice(0, 5), longCount: longRounds.length, lostSeconds
                     };
                 });
