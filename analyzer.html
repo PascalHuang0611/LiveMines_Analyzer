@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.97</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.98</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -797,12 +797,23 @@
                                 <span class="font-bold text-white">{{ houseStats.convMedian.toFixed(0) }}%</span>。
                                 人進得來，轉化才是問題。
                             </p>
-                            <p class="text-xs text-gray-500 mt-2 leading-relaxed">
-                                註：實際數字比這更低。「下注人次」的官方定義含 0 元參與者
+                            <div class="mt-4 pt-4 border-t border-white/10">
+                                <div class="flex items-baseline justify-between">
+                                    <span class="text-xs text-gray-400">開獎過程中的人數淨變化</span>
+                                    <span class="font-bold" :class="houseStats.endtime >= houseStats.bettime ? 'text-green-400' : 'text-red-400'">
+                                        {{ houseStats.endtime >= houseStats.bettime ? '+' : '' }}{{ (houseStats.endtime - houseStats.bettime).toLocaleString() }}
+                                        <span class="text-xs font-normal">（{{ ((houseStats.endtime - houseStats.bettime) / houseStats.bettime * 100).toFixed(2) }}%）</span>
+                                    </span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    比較下注倒數當下與開獎結束瞬間的房內人數：{{ houseStats.roundsUp }} 局變多、{{ houseStats.roundsDown }} 局變少。
+                                    <span v-if="houseStats.endtime >= houseStats.bettime">開獎過程本身會把人留住，甚至吸引人進來看。</span>
+                                    <span v-else>開獎過程正在流失觀眾，值得檢查節奏或呈現方式。</span>
+                                </p>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-3 leading-relaxed">
+                                註：轉化率實際比上面更低 ——「下注人次」的官方定義含 0 元參與者
                                 （{{ houseStats.zeroBetRounds }} 局投注額為 0 卻仍記有下注人數）。
-                                另外「局末在場人次」未列入 —— 它與下注時段在場人次有
-                                {{ (houseStats.snapshotMismatch / houseStats.approvedRounds * 100).toFixed(0) }}% 的局呈反向，
-                                是兩個不同時點的快照而非同一批人的前後變化，不能當漏斗層級看。
                             </p>
                         </div>
 
@@ -1578,16 +1589,20 @@
                     const midPoint = cumulative[Math.min(999, cumulative.length - 1)];
 
                     // --- 參與轉換 ---
-                    // 只有「下注人次 ⊆ 下注時段在場人次」這層站得住 (實測零例外)。
-                    // 局末在場人次不能當漏斗上層 —— 它有相當比例的局反而比下注時段還少, 是兩個時點的快照。
+                    // Bettime Players = 下注倒數當下的房內人數, Endtime Players = 開獎結束那一瞬間的人數。
+                    // 兩者是不同時點的快照, 不是同一批人的前後狀態, 所以不能串成漏斗;
+                    // 唯一成立的層級是「下注人次 ⊆ 下注時段在場人次」(實測零例外)。
                     const bettime = approved.reduce((s, r) => s + n(r['Bettime Players']), 0);
+                    const endtime = approved.reduce((s, r) => s + n(r['Endtime Players']), 0);
                     const betPlayer = approved.reduce((s, r) => s + n(r['Bet Player']), 0);
-                    const snapshotMismatch = approved.filter(r => n(r['Bettime Players']) > n(r['Endtime Players'])).length;
                     const zeroBetRounds = approved.filter(r => n(r['Bet Amount']) === 0 && n(r['Bet Player']) > 0).length;
                     const convRates = approved.filter(r => n(r['Bettime Players']) > 0)
                         .map(r => n(r['Bet Player']) / n(r['Bettime Players']) * 100)
                         .sort((a, b) => a - b);
                     const convMedian = convRates.length ? convRates[Math.floor(convRates.length / 2)] : 0;
+                    // 兩個時點的差 = 開獎過程本身是把人留住還是趕走
+                    const roundsUp = approved.filter(r => n(r['Endtime Players']) > n(r['Bettime Players'])).length;
+                    const roundsDown = approved.filter(r => n(r['Endtime Players']) < n(r['Bettime Players'])).length;
 
                     // --- 節奏: 長局會卡住開局, 是可回收的營收缺口 ---
                     const durations = [];
@@ -1626,7 +1641,7 @@
                         ggrDrop1: tailCurve[1] ? tailCurve[1].ggr : ggr,
                         ggrDrop10: tailCurve[10] ? tailCurve[10].ggr : ggr,
                         cumulative, settleAt, midPoint,
-                        bettime, betPlayer, convMedian, snapshotMismatch, zeroBetRounds,
+                        bettime, endtime, betPlayer, convMedian, zeroBetRounds, roundsUp, roundsDown,
                         approvedRounds: approved.length,
                         medianDur, longRounds: longRounds.slice(0, 5), longCount: longRounds.length, lostSeconds
                     };
