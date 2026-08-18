@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.24</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.25</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -352,7 +352,10 @@
             <!-- Segment Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家']" :key="seg"
-                    class="glass rounded-2xl p-6 relative overflow-hidden">
+                    @click="segmentFilter = (segmentFilter === seg ? null : seg)"
+                    class="glass rounded-2xl p-6 relative overflow-hidden cursor-pointer transition-all"
+                    :class="segmentFilter === seg ? 'ring-2 ring-indigo-400 bg-indigo-500/10' : 'hover:ring-1 hover:ring-white/20'"
+                    :title="segmentFilter === seg ? '再點一次取消篩選' : '點擊只看這一群玩家'">
                     <div
                         class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-bl-full -z-10">
                     </div>
@@ -361,7 +364,9 @@
                         {{ seg }}
                     </h3>
                     <div class="text-3xl font-extrabold mb-1">{{ clusterStats[seg]?.count.toLocaleString() || 0 }} <span
-                            class="text-sm font-normal text-gray-400">人</span></div>
+                            class="text-sm font-normal text-gray-400">人</span>
+                        <span v-if="segmentFilter === seg" class="text-[10px] font-normal text-indigo-300 border border-indigo-400/50 rounded px-1.5 py-0.5 ml-2 align-middle">篩選中</span>
+                    </div>
                     <div class="text-sm text-gray-400 mb-1">平均單局下注額: <span class="text-white font-bold">
                         {{ clusterStats[seg]?.rounds > 0 ? formatMoney(clusterStats[seg].turnover / clusterStats[seg].rounds) : '0.00' }}
                     </span></div>
@@ -490,8 +495,17 @@
 
             <!-- Top Players Table -->
             <div class="glass rounded-2xl p-6 mb-6">
-                <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-3 flex-wrap">
                     全站玩家排行
+                    <span v-if="segmentFilter" class="text-sm px-2 py-1 rounded bg-indigo-600/30 text-indigo-200 font-normal border border-indigo-400/40 flex items-center gap-2">
+                        只看 {{ segmentFilter }}
+                        <button @click="segmentFilter = null" class="text-indigo-300 hover:text-white leading-none" title="顯示全部分群">✕</button>
+                    </span>
+                    <button @click="exportPlayerList" :disabled="!filteredPlayers.length"
+                        class="ml-auto px-3 py-1.5 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30 disabled:opacity-40"
+                        :title="`把目前列表的 ${filteredPlayers.length.toLocaleString()} 位玩家匯出成 CSV，含每日投注與餘額`">
+                        匯出目前列表（{{ filteredPlayers.length.toLocaleString() }} 人）
+                    </button>
                 </h3>
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4 -mt-2">
                     <p class="text-sm text-gray-400">
@@ -2837,15 +2851,43 @@
                     return names.slice(1).find(nm => nm.toLowerCase().includes(q)) || null;
                 };
 
-                // 玩家搜尋: 帳號與「所有」暱稱都比對, 不分大小寫的片段比對
+                // 點上方的分群卡片就只看那一群; null = 全部
+                const segmentFilter = ref(null);
+                watch(segmentFilter, () => { displayCount.value = 20; });
+
+                // 玩家搜尋: 帳號與「所有」暱稱都比對, 不分大小寫的片段比對。與分群篩選可疊加。
                 const filteredPlayers = computed(() => {
                     const q = playerSearch.value.trim().toLowerCase();
-                    if (!q) return sortedPlayers.value;
-                    return sortedPlayers.value.filter(p => {
+                    const seg = segmentFilter.value;
+                    let arr = sortedPlayers.value;
+                    if (seg) arr = arr.filter(p => p.segment === seg);
+                    if (!q) return arr;
+                    return arr.filter(p => {
                         if (String(p.account).toLowerCase().includes(q)) return true;
                         return nicknamesOf(p).some(nm => nm.toLowerCase().includes(q));
                     });
                 });
+
+                // 把目前列表(已套用分群與搜尋)整批倒出來, 含每日欄位 —— 跨玩家比較用
+                const exportPlayerList = () => {
+                    const days = rangeDays.value;
+                    const head = ['帳號', '暱稱', '分群', '總流水', '總派彩', '玩家盈虧', 'RTP(%)', '遊玩局數', '契合度', '契合度可評估局數'];
+                    days.forEach(d => head.push(d + ' 投注', d + ' 初始餘額', d + ' 結束餘額'));
+                    const rows = [head];
+                    filteredPlayers.value.forEach(p => {
+                        const row = [p.account, nicknameOf(p) || '', p.segment || '',
+                            p.totalTurnover, p.totalPayout, p.winLoss, p.rtp.toFixed(2), p.roundsCount,
+                            p.alignScore === null ? '' : p.alignScore.toFixed(1), p.alignRounds];
+                        days.forEach(d => {
+                            const x = p.daily[d];
+                            row.push(x ? x.bet : '', x && x.open !== null ? x.open : '', x && x.close !== null ? x.close : '');
+                        });
+                        rows.push(row);
+                    });
+                    const scope = [segmentFilter.value || '全分群', playerSearch.value.trim() || '無關鍵字',
+                        rangeIsFull.value ? '全部日期' : rangeFrom.value + '_' + rangeTo.value].join('_');
+                    downloadCsv(('玩家列表_' + scope + '.csv').replace(/[\/:*?"<>|]/g, '_'), rows);
+                };
 
                 // 把帳號拆成 [未命中, 命中, 未命中...] 好在表格裡標出比對到的位置
                 const highlightParts = (account) => {
@@ -3041,6 +3083,7 @@
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
                     betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays, playerView, selectedDay,
+                    segmentFilter, exportPlayerList,
                     exportRounds, exportSummary,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
