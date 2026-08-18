@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.01</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.02</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -502,7 +502,7 @@
         </div>
         
         <!-- Player Modal -->
-        <div v-if="selectedPlayer && !showChartModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+        <div v-if="selectedPlayer && !showChartModal && !showBetTrendModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
             <div class="glass rounded-2xl w-full max-w-2xl relative my-auto">
                 <button @click="selectedPlayer = null" class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
                     ✕
@@ -556,9 +556,12 @@
                                 {{ selectedPlayer.roundsCount > 0 ? (selectedPlayer.totalWinRounds / selectedPlayer.roundsCount * 100).toFixed(2) : '0.00' }}%
                             </div>
                         </div>
-                        <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5 flex items-center justify-center">
-                            <button @click="openChart" class="w-full h-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-bold transition-colors">
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5 flex flex-col justify-center gap-2">
+                            <button @click="openChart" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-bold transition-colors">
                                 查看歷程圖表
+                            </button>
+                            <button @click="openBetTrend" class="w-full py-2 bg-white/10 hover:bg-white/20 rounded text-sm font-bold transition-colors">
+                                押注行為變化
                             </button>
                         </div>
                     </div>
@@ -643,19 +646,104 @@
                             </div>
                             <div class="text-xs text-gray-400 leading-relaxed">
                                 <template v-if="placeSummary(selectedPlayer.placeCounts)">
-                                    <div>最常押 <span class="font-bold text-indigo-300">第 {{ placeSummary(selectedPlayer.placeCounts).top.place }} 格</span>
-                                        （{{ placeSummary(selectedPlayer.placeCounts).top.pct.toFixed(1) }}%），
-                                        最少押 <span class="font-bold text-gray-300">第 {{ placeSummary(selectedPlayer.placeCounts).bottom.place }} 格</span>
-                                        （{{ placeSummary(selectedPlayer.placeCounts).bottom.pct.toFixed(1) }}%）。</div>
+                                    <div v-if="placeSummary(selectedPlayer.placeCounts).tooManyTies" class="text-gray-400">
+                                        有 {{ placeSummary(selectedPlayer.placeCounts).topPlaces.length }} 個格位並列最高（各
+                                        {{ placeSummary(selectedPlayer.placeCounts).topPct.toFixed(1) }}%），沒有明顯偏好。
+                                    </div>
+                                    <div v-else>
+                                        最常押
+                                        <span class="font-bold text-indigo-300">第
+                                            {{ placeSummary(selectedPlayer.placeCounts).topPlaces.join('、') }} 格</span>
+                                        （{{ placeSummary(selectedPlayer.placeCounts).topPlaces.length > 1 ? '各 ' : ''
+                                        }}{{ placeSummary(selectedPlayer.placeCounts).topPct.toFixed(1) }}%）。
+                                    </div>
                                     <div class="mt-2 text-gray-500">
-                                        {{ placeSummary(selectedPlayer.placeCounts).spread < 3
-                                            ? '各格分布接近均勻，看不出特定偏好。'
-                                            : '偏好明顯，集中在特定格位。' }}
-                                        共 {{ placeSummary(selectedPlayer.placeCounts).total.toLocaleString() }} 次格注。
+                                        共 {{ placeSummary(selectedPlayer.placeCounts).total.toLocaleString() }} 次格注，
+                                        押過 {{ placeSummary(selectedPlayer.placeCounts).used }} / 9 個格位。
+                                        <template v-if="placeSummary(selectedPlayer.placeCounts).used === 9 && placeSummary(selectedPlayer.placeCounts).spread < 3">
+                                            分布接近均勻，看不出特定偏好。
+                                        </template>
                                     </div>
                                 </template>
                                 <span v-else class="text-gray-500">沒有格注紀錄。</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 押注變化圖 -->
+        <div v-if="showBetTrendModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
+            <div class="glass rounded-2xl w-full max-w-7xl h-[88vh] flex flex-col relative">
+                <button @click="showBetTrendModal = false" class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-10">✕</button>
+
+                <div class="p-6 border-b border-white/10 shrink-0">
+                    <h3 class="text-2xl font-bold flex items-center gap-3 flex-wrap">
+                        <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-400 font-mono text-lg'">{{ displayName(selectedPlayer) }}</span>
+                        <span class="text-gray-400 font-normal">押注行為變化</span>
+                    </h3>
+                </div>
+
+                <!-- 顆粒度 -->
+                <div class="px-6 py-4 shrink-0 bg-slate-800/30 flex flex-wrap items-center gap-4">
+                    <div class="text-sm text-gray-400">顆粒度</div>
+                    <div class="flex rounded-lg overflow-hidden border border-white/10">
+                        <button @click="betTrendMode = 'rounds'; betTrendSize = 5"
+                            class="px-3 py-1.5 text-sm transition-colors"
+                            :class="betTrendMode === 'rounds' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依局數</button>
+                        <button @click="betTrendMode = 'time'; betTrendSize = 30"
+                            class="px-3 py-1.5 text-sm transition-colors"
+                            :class="betTrendMode === 'time' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依時間</button>
+                    </div>
+                    <div class="flex gap-1">
+                        <button v-for="o in betTrendOptions[betTrendMode]" :key="o.v" @click="betTrendSize = o.v"
+                            class="px-3 py-1.5 rounded text-sm transition-colors border"
+                            :class="betTrendSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5'">
+                            {{ o.t }}
+                        </button>
+                    </div>
+                    <div v-if="betTrendTotals" class="text-xs text-gray-500 ml-auto">
+                        {{ betTrendTotals.buckets }} 個區間 ·
+                        <span :class="betTrendTotals.winLoss >= 0 ? 'text-green-400' : 'text-red-400'">
+                            總計 {{ betTrendTotals.winLoss >= 0 ? '+' : '' }}{{ fmtInt(betTrendTotals.winLoss) }}
+                        </span>
+                        · 賺 {{ betTrendTotals.up }} / 賠 {{ betTrendTotals.down }} 個區間
+                    </div>
+                </div>
+
+                <div class="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-6 pt-2">
+                    <!-- 圖: 區間多的時候橫向捲動 -->
+                    <div class="flex-1 min-w-0 min-h-0 overflow-x-auto overflow-y-hidden">
+                        <div :style="{ minWidth: '100%', width: Math.max(600, betTrendBuckets.length * 46) + 'px', height: '100%' }">
+                            <canvas id="betTrendChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 各區間的輸贏 -->
+                    <div class="lg:w-80 shrink-0 min-h-0 flex flex-col">
+                        <div class="text-xs text-gray-400 mb-2 shrink-0">各區間輸贏</div>
+                        <div class="flex-1 min-h-0 overflow-y-auto pr-1">
+                            <table class="w-full text-xs">
+                                <thead class="sticky top-0 bg-slate-900">
+                                    <tr class="text-gray-500 text-left">
+                                        <th class="py-1.5">區間</th>
+                                        <th class="py-1.5 text-right">押注</th>
+                                        <th class="py-1.5 text-right">淨輸贏</th>
+                                        <th class="py-1.5 text-right">RTP</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(b, i) in betTrendBuckets" :key="i" class="border-b border-white/5">
+                                        <td class="py-1.5 text-gray-400 whitespace-nowrap" :title="`局數 ${b.rounds}\n平均押注格數 ${b.avgGrids.toFixed(2)}\nEXBET 使用率 ${b.exRate.toFixed(0)}%`">{{ b.label }}</td>
+                                        <td class="py-1.5 text-right text-gray-400">{{ fmtInt(b.bet) }}</td>
+                                        <td class="py-1.5 text-right font-bold" :class="b.winLoss > 0 ? 'text-green-400' : (b.winLoss < 0 ? 'text-red-400' : 'text-gray-500')">
+                                            {{ b.winLoss > 0 ? '+' : '' }}{{ fmtInt(b.winLoss) }}
+                                        </td>
+                                        <td class="py-1.5 text-right" :class="b.rtp >= 100 ? 'text-green-400' : 'text-gray-500'">{{ b.rtp.toFixed(0) }}%</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -1017,8 +1105,83 @@
                 const selectedPlayer = ref(null);
                 const showChartModal = ref(false);
 
-                watch([selectedPlayer, showChartModal], ([player, chart]) => {
-                    if (player || chart) {
+                // ===== 押注變化圖: 把玩家的局依「每 N 局」或「每 N 分鐘」分桶 =====
+                const showBetTrendModal = ref(false);
+                const betTrendMode = ref('rounds'); // 'rounds' | 'time'
+                const betTrendSize = ref(5);
+
+                const BET_TREND_OPTIONS = {
+                    rounds: [{ v: 5, t: '每 5 局' }, { v: 10, t: '每 10 局' }, { v: 25, t: '每 25 局' }, { v: 50, t: '每 50 局' }],
+                    time: [{ v: 15, t: '每 15 分鐘' }, { v: 30, t: '每 30 分鐘' }, { v: 60, t: '每 1 小時' }, { v: 180, t: '每 3 小時' }]
+                };
+
+                const bucketTimeLabel = (ms) => {
+                    const d = new Date(ms);
+                    const p = (x) => String(x).padStart(2, '0');
+                    return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+                };
+
+                const betTrendBuckets = computed(() => {
+                    const p = selectedPlayer.value;
+                    if (!p || !p.rounds || !p.rounds.length) return [];
+                    const rounds = [...p.rounds].sort((a, b) => a.billTime - b.billTime);
+
+                    const out = [];
+                    const push = (label, list) => {
+                        if (!list.length) return;
+                        const bet = list.reduce((s, r) => s + r.bet, 0);
+                        const payout = list.reduce((s, r) => s + r.payout, 0);
+                        const winLoss = list.reduce((s, r) => s + r.winLoss, 0);
+                        const grids = list.reduce((s, r) => s + r.grids, 0);
+                        const exRounds = list.filter(r => r.exbetCount > 0).length;
+                        out.push({
+                            label, rounds: list.length, bet, payout, winLoss,
+                            rtp: bet > 0 ? payout / bet * 100 : 0,
+                            avgBet: bet / list.length,
+                            avgGrids: grids / list.length,
+                            exRate: exRounds / list.length * 100,
+                            from: list[0].billTime, to: list[list.length - 1].billTime
+                        });
+                    };
+
+                    if (betTrendMode.value === 'rounds') {
+                        const n = Math.max(1, betTrendSize.value);
+                        for (let i = 0; i < rounds.length; i += n) {
+                            const slice = rounds.slice(i, i + n);
+                            push(`${i + 1}–${Math.min(i + n, rounds.length)} 局`, slice);
+                        }
+                    } else {
+                        // 依時間分桶。玩家常常是斷斷續續玩, 空桶不畫 —— 全部畫出來會是一大片空白,
+                        // 代價是 x 軸間距不等距, 所以標籤直接寫實際時間讓人看得出跳過了多久。
+                        const ms = Math.max(1, betTrendSize.value) * 60000;
+                        const t0 = rounds[0].billTime;
+                        let cur = [], curIdx = null;
+                        rounds.forEach(r => {
+                            const idx = Math.floor((r.billTime - t0) / ms);
+                            if (curIdx !== null && idx !== curIdx) {
+                                push(bucketTimeLabel(t0 + curIdx * ms), cur);
+                                cur = [];
+                            }
+                            curIdx = idx;
+                            cur.push(r);
+                        });
+                        if (cur.length) push(bucketTimeLabel(t0 + curIdx * ms), cur);
+                    }
+                    return out;
+                });
+
+                const betTrendTotals = computed(() => {
+                    const b = betTrendBuckets.value;
+                    if (!b.length) return null;
+                    const bet = b.reduce((s, x) => s + x.bet, 0);
+                    const winLoss = b.reduce((s, x) => s + x.winLoss, 0);
+                    const up = b.filter(x => x.winLoss > 0).length;
+                    return { buckets: b.length, bet, winLoss, up, down: b.filter(x => x.winLoss < 0).length };
+                });
+
+
+                watch([selectedPlayer, showChartModal, showBetTrendModal], ([player, chart, trend]) => {
+                    if (player || chart || trend) {
                         document.body.style.overflow = 'hidden';
                     } else {
                         document.body.style.overflow = '';
@@ -1565,6 +1728,77 @@
                     });
                 };
 
+                let betTrendChartInstance = null;
+
+                const renderBetTrendChart = () => {
+                    const el = document.getElementById('betTrendChart');
+                    if (!el) return;
+                    if (betTrendChartInstance) betTrendChartInstance.destroy();
+                    const data = betTrendBuckets.value;
+                    if (!data.length) return;
+
+                    betTrendChartInstance = new Chart(el, {
+                        data: {
+                            labels: data.map(b => b.label),
+                            datasets: [
+                                {
+                                    label: '平均單局押注額', type: 'bar', yAxisID: 'yAmount',
+                                    data: data.map(b => b.avgBet),
+                                    backgroundColor: 'rgba(99, 102, 241, 0.45)',
+                                    borderColor: '#6366f1', borderWidth: 1, order: 3
+                                },
+                                {
+                                    label: '平均押注格數', type: 'line', yAxisID: 'yGrids',
+                                    data: data.map(b => b.avgGrids),
+                                    borderColor: '#facc15', borderWidth: 2, pointRadius: 2, tension: 0.3, fill: false, order: 1
+                                },
+                                {
+                                    label: 'EXBET 使用率', type: 'line', yAxisID: 'yPct',
+                                    data: data.map(b => b.exRate),
+                                    borderColor: '#f472b6', borderWidth: 2, borderDash: [4, 3], pointRadius: 0, tension: 0.3, fill: false, order: 2
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { labels: { color: '#cbd5e1', boxWidth: 12 } },
+                                tooltip: {
+                                    callbacks: {
+                                        afterBody: (items) => {
+                                            const b = data[items[0].dataIndex];
+                                            return [
+                                                `局數 ${b.rounds}`,
+                                                `總押注 ${Math.round(b.bet).toLocaleString()}`,
+                                                `淨輸贏 ${b.winLoss >= 0 ? '+' : ''}${Math.round(b.winLoss).toLocaleString()}`,
+                                                `RTP ${b.rtp.toFixed(1)}%`
+                                            ];
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                yAmount: { position: 'left', beginAtZero: true, grid: GRID,
+                                    ticks: { color: '#94a3b8' }, title: { display: true, text: '平均押注額', color: '#6366f1', font: { size: 10 } } },
+                                yGrids: { position: 'right', min: 0, max: 9, grid: { display: false },
+                                    ticks: { color: '#facc15', stepSize: 1 }, title: { display: true, text: '格數', color: '#facc15', font: { size: 10 } } },
+                                yPct: { position: 'right', min: 0, max: 100, display: false },
+                                x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 60, minRotation: 0, autoSkip: false } }
+                            }
+                        }
+                    });
+                };
+
+                const openBetTrend = () => {
+                    showBetTrendModal.value = true;
+                    nextTick(renderBetTrendChart);
+                };
+
+                watch([betTrendMode, betTrendSize], () => {
+                    if (showBetTrendModal.value) nextTick(renderBetTrendChart);
+                });
+
                 // 分頁是 v-if 切換的, 離開時 canvas 連同整個區塊被銷毀, 切回來是一張全新的空 canvas。
                 // 兩邊的圖都要在切回來時重畫, 否則圖表會憑空消失。
                 watch([activeTab, hasData, hasGameData], ([tab, billReady, gameReady]) => {
@@ -1790,13 +2024,18 @@
                     });
                 };
 
-                // 給文字敘述用: 最常/最少押的格, 以及分布離均勻有多遠
+                // 給文字敘述用。只講「最常押」—— 玩家常常只押過 2~3 個格位, 其餘全是 0,
+                // 這時挑一個當「最少押」是沒有意義的(有六個並列 0%)。並列最高的一起列出。
                 const placeSummary = (counts) => {
                     const cells = placePreference(counts);
                     const total = cells[0] ? cells[0].total : 0;
                     if (!total) return null;
-                    const sorted = [...cells].sort((a, b) => b.pct - a.pct);
-                    return { top: sorted[0], bottom: sorted[8], total, spread: sorted[0].pct - sorted[8].pct };
+                    const maxPct = Math.max(...cells.map(c => c.pct));
+                    const topPlaces = cells.filter(c => c.pct === maxPct).map(c => c.place);
+                    const used = cells.filter(c => c.count > 0).length;
+                    const spread = maxPct - Math.min(...cells.filter(c => c.count > 0).map(c => c.pct));
+                    // 並列太多格時列出來只是一長串數字, 不如直接說沒有偏好
+                    return { topPlaces, topPct: maxPct, used, total, spread, tooManyTies: topPlaces.length > 3 };
                 };
 
                 const nicknameCount = computed(() => {
@@ -2027,6 +2266,8 @@
                     matchedAlias, placePreference, placeSummary,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
+                    showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
+                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
