@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.19</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.21</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -554,11 +554,12 @@
                             </tr>
                             <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="group border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
                                 <td class="p-3 text-left sticky left-0 bg-[#1e2739] group-hover:bg-[#273043] z-10 border-r border-white/10 transition-colors">
-                                    <div class="font-bold flex items-center gap-1.5" :class="nicknameOf(player) ? 'text-indigo-300' : 'text-gray-400 font-mono text-xs'">
-                                        <span>
+                                    <div class="font-bold flex items-center gap-1.5">
+                                        <span v-if="nicknameOf(player)" class="text-indigo-300">
                                             <span v-for="(part, i) in highlightParts(displayName(player))" :key="i"
                                                 :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded px-0.5' : ''">{{ part.text }}</span>
                                         </span>
+                                        <span v-else class="text-gray-600 italic font-normal">{{ displayName(player) }}</span>
                                         <span v-if="nicknamesOf(player).length > 1" class="cursor-help text-[9px] font-normal text-gray-500 border border-gray-600 rounded px-1 py-px shrink-0"
                                             :title="`此帳號記錄過 ${nicknamesOf(player).length} 個暱稱：\n${nicknamesOf(player).join('\n')}`">
                                             +{{ nicknamesOf(player).length - 1 }}
@@ -569,7 +570,7 @@
                                         <span v-for="(part, i) in highlightParts(matchedAlias(player))" :key="i"
                                             :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded' : ''">{{ part.text }}</span>
                                     </div>
-                                    <div v-if="nicknameOf(player)" class="text-[10px] text-gray-500 font-mono mt-0.5">
+                                    <div class="text-[10px] text-gray-500 font-mono mt-0.5">
                                         <span v-for="(part, i) in highlightParts(player.account)" :key="i"
                                             :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded' : ''">{{ part.text }}</span>
                                     </div>
@@ -626,10 +627,14 @@
                 </button>
                 <div class="p-6 border-b border-white/10">
                     <h3 class="text-2xl font-bold flex items-center gap-3 flex-wrap">
-                        <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-400 font-mono text-lg'">{{ displayName(selectedPlayer) }}</span>
+                        <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-600 italic font-normal text-xl'">{{ displayName(selectedPlayer) }}</span>
                         <span class="text-sm px-2 py-1 rounded bg-white/10 text-gray-300 font-normal border border-white/5">{{ selectedPlayer.segment }}</span>
+                        <span v-if="selectedDay" class="text-sm px-2 py-1 rounded bg-indigo-600/30 text-indigo-200 font-normal border border-indigo-400/40 flex items-center gap-2">
+                            只看 {{ selectedDay }}
+                            <button @click="selectedDay = null" class="text-indigo-300 hover:text-white leading-none" title="回到全部日期">✕</button>
+                        </span>
                     </h3>
-                    <div v-if="nicknameOf(selectedPlayer)" class="text-xs text-gray-500 font-mono mt-1">{{ selectedPlayer.account }}</div>
+                    <div class="text-xs text-gray-500 font-mono mt-1">{{ selectedPlayer.account }}</div>
                     <div v-if="nicknamesOf(selectedPlayer).length > 1" class="text-xs text-gray-500 mt-1">
                         此帳號記錄過 {{ nicknamesOf(selectedPlayer).length }} 個暱稱：
                         <span class="text-gray-400">{{ nicknamesOf(selectedPlayer).join('、') }}</span>
@@ -640,38 +645,38 @@
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">總流水 (Turnover)</div>
-                            <div class="font-bold text-white">{{ formatMoney(selectedPlayer.totalTurnover) }}</div>
+                            <div class="font-bold text-white">{{ formatMoney(playerView.totalTurnover) }}</div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">總派彩 (Payout)</div>
-                            <div class="font-bold text-gray-300">{{ formatMoney(selectedPlayer.totalPayout) }}</div>
+                            <div class="font-bold text-gray-300">{{ formatMoney(playerView.totalPayout) }}</div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">玩家盈虧 (Win/Loss)</div>
-                            <div class="font-bold" :class="selectedPlayer.winLoss > 0 ? 'text-green-400' : 'text-red-400'">
-                                {{ formatMoney(selectedPlayer.winLoss) }}
+                            <div class="font-bold" :class="playerView.winLoss > 0 ? 'text-green-400' : 'text-red-400'">
+                                {{ formatMoney(playerView.winLoss) }}
                             </div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">RTP</div>
-                            <div class="font-bold" :class="selectedPlayer.rtp >= 100 ? 'text-red-400' : 'text-green-400'">
-                                {{ selectedPlayer.rtp.toFixed(2) }}%
+                            <div class="font-bold" :class="playerView.rtp >= 100 ? 'text-red-400' : 'text-green-400'">
+                                {{ playerView.rtp.toFixed(2) }}%
                             </div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">總參與局數</div>
-                            <div class="font-bold text-white">{{ selectedPlayer.roundsCount.toLocaleString() }}</div>
+                            <div class="font-bold text-white">{{ playerView.roundsCount.toLocaleString() }}</div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">Hit Rate</div>
                             <div class="font-bold text-green-400">
-                                {{ selectedPlayer.roundsCount > 0 ? (selectedPlayer.totalHitRounds / selectedPlayer.roundsCount * 100).toFixed(2) : '0.00' }}%
+                                {{ playerView.roundsCount > 0 ? (playerView.totalHitRounds / playerView.roundsCount * 100).toFixed(2) : '0.00' }}%
                             </div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">Win Rate</div>
                             <div class="font-bold text-blue-400">
-                                {{ selectedPlayer.roundsCount > 0 ? (selectedPlayer.totalWinRounds / selectedPlayer.roundsCount * 100).toFixed(2) : '0.00' }}%
+                                {{ playerView.roundsCount > 0 ? (playerView.totalWinRounds / playerView.roundsCount * 100).toFixed(2) : '0.00' }}%
                             </div>
                         </div>
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5 flex flex-col justify-center gap-2">
@@ -692,44 +697,44 @@
                         </h4>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                             <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
-                                :title="`分子 (有押 EXBET 的局數): ${selectedPlayer.exbetRounds}\n分母 (總參與局數): ${selectedPlayer.roundsCount}`">
+                                :title="`分子 (有押 EXBET 的局數): ${playerView.exbetRounds}\n分母 (總參與局數): ${playerView.roundsCount}`">
                                 <div class="text-xs text-gray-500 mb-1">參與率</div>
                                 <div class="font-bold text-white text-lg">
-                                    {{ selectedPlayer.roundsCount > 0 ? (selectedPlayer.exbetRounds / selectedPlayer.roundsCount * 100).toFixed(1) : 0 }}%
+                                    {{ playerView.roundsCount > 0 ? (playerView.exbetRounds / playerView.roundsCount * 100).toFixed(1) : 0 }}%
                                 </div>
-                                <div class="text-xs text-gray-400">{{ selectedPlayer.exbetRounds }} 局</div>
+                                <div class="text-xs text-gray-400">{{ playerView.exbetRounds }} 局</div>
                             </div>
                             <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
                                 :title="`Bet Place = 10 的注單金額合計\n該欄位的 Payout 恆為 0, 回報是灌在同局格注的倍數裡`">
                                 <div class="text-xs text-gray-500 mb-1">EXBET 累計押注</div>
                                 <div class="font-bold text-gray-300 text-lg">
-                                    {{ formatMoney(selectedPlayer.exbetBet) }}
+                                    {{ formatMoney(playerView.exbetBet) }}
                                 </div>
                                 <div class="text-xs text-gray-400">
-                                    占總流水 {{ selectedPlayer.totalTurnover > 0 ? (selectedPlayer.exbetBet / selectedPlayer.totalTurnover * 100).toFixed(1) : '0.0' }}%
+                                    占總流水 {{ playerView.totalTurnover > 0 ? (playerView.exbetBet / playerView.totalTurnover * 100).toFixed(1) : '0.0' }}%
                                 </div>
                             </div>
                             <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
-                                :title="`計算公式: 該局總派彩 / 該局總投注 (投注含 EXBET)\n分子: ${formatMoney(selectedPlayer.exbetRoundPayout)}\n分母: ${formatMoney(selectedPlayer.exbetRoundBet)}`">
+                                :title="`計算公式: 該局總派彩 / 該局總投注 (投注含 EXBET)\n分子: ${formatMoney(playerView.exbetRoundPayout)}\n分母: ${formatMoney(playerView.exbetRoundBet)}`">
                                 <div class="text-xs text-gray-500 mb-1">有押 EXBET 局 RTP</div>
                                 <div class="font-bold text-yellow-400 text-lg">
-                                    {{ selectedPlayer.exbetRtp !== null ? selectedPlayer.exbetRtp.toFixed(2) + '%' : '—' }}
+                                    {{ playerView.exbetRtp !== null ? playerView.exbetRtp.toFixed(2) + '%' : '—' }}
                                 </div>
-                                <div class="text-xs" :class="selectedPlayer.exbetWinLoss > 0 ? 'text-green-400' : (selectedPlayer.exbetWinLoss < 0 ? 'text-red-400' : 'text-gray-400')">
-                                    {{ selectedPlayer.exbetWinLoss > 0 ? '+' : '' }}{{ formatMoney(selectedPlayer.exbetWinLoss) }}
+                                <div class="text-xs" :class="playerView.exbetWinLoss > 0 ? 'text-green-400' : (playerView.exbetWinLoss < 0 ? 'text-red-400' : 'text-gray-400')">
+                                    {{ playerView.exbetWinLoss > 0 ? '+' : '' }}{{ formatMoney(playerView.exbetWinLoss) }}
                                 </div>
                             </div>
                             <div class="bg-slate-800/50 rounded-lg p-3 border border-white/5 cursor-help"
-                                :title="`同一玩家: 有押 EXBET 的局 RTP 減去沒押 EXBET 的局 RTP\n沒押 EXBET 局 RTP: ${selectedPlayer.plainRtp !== null ? selectedPlayer.plainRtp.toFixed(2) + '%' : '無資料'}\n沒押 EXBET 局數: ${selectedPlayer.plainRounds}`">
+                                :title="`同一玩家: 有押 EXBET 的局 RTP 減去沒押 EXBET 的局 RTP\n沒押 EXBET 局 RTP: ${playerView.plainRtp !== null ? playerView.plainRtp.toFixed(2) + '%' : '無資料'}\n沒押 EXBET 局數: ${playerView.plainRounds}`">
                                 <div class="text-xs text-gray-500 mb-1">EXBET 增益</div>
-                                <div class="font-bold text-lg" :class="selectedPlayer.exbetLift === null ? 'text-gray-500' : (selectedPlayer.exbetLift > 0 ? 'text-green-400' : 'text-red-400')">
-                                    <template v-if="selectedPlayer.exbetLift !== null">
-                                        {{ selectedPlayer.exbetLift > 0 ? '+' : '' }}{{ selectedPlayer.exbetLift.toFixed(2) }} pp
+                                <div class="font-bold text-lg" :class="playerView.exbetLift === null ? 'text-gray-500' : (playerView.exbetLift > 0 ? 'text-green-400' : 'text-red-400')">
+                                    <template v-if="playerView.exbetLift !== null">
+                                        {{ playerView.exbetLift > 0 ? '+' : '' }}{{ playerView.exbetLift.toFixed(2) }} pp
                                     </template>
                                     <template v-else>—</template>
                                 </div>
                                 <div class="text-xs text-gray-400">
-                                    無 EXBET 局 {{ selectedPlayer.plainRtp !== null ? selectedPlayer.plainRtp.toFixed(2) + '%' : '—' }}
+                                    無 EXBET 局 {{ playerView.plainRtp !== null ? playerView.plainRtp.toFixed(2) + '%' : '—' }}
                                 </div>
                             </div>
                         </div>
@@ -740,11 +745,11 @@
                         <div class="grid grid-cols-3 md:grid-cols-5 gap-2">
                             <div v-for="g in 9" :key="g"
                                 class="rounded p-2 text-center border border-white/5 transition-all"
-                                :style="{ background: `linear-gradient(to top, rgba(99, 102, 241, 0.3) ${selectedPlayer.roundsCount > 0 ? ((selectedPlayer.gridsDist[g] || 0) / selectedPlayer.roundsCount * 100) : 0}%, rgba(30, 41, 59, 0.5) 0%)` }">
+                                :style="{ background: `linear-gradient(to top, rgba(99, 102, 241, 0.3) ${playerView.roundsCount > 0 ? ((playerView.gridsDist[g] || 0) / playerView.roundsCount * 100) : 0}%, rgba(30, 41, 59, 0.5) 0%)` }">
                                 <div class="text-xs text-gray-400 mb-1 relative z-10">{{ g }} 格</div>
-                                <div class="font-bold text-indigo-300 relative z-10">{{ (selectedPlayer.gridsDist[g] || 0).toLocaleString() }} <span class="text-[10px] text-gray-500 font-normal">次</span></div>
+                                <div class="font-bold text-indigo-300 relative z-10">{{ (playerView.gridsDist[g] || 0).toLocaleString() }} <span class="text-[10px] text-gray-500 font-normal">次</span></div>
                                 <div class="text-[10px] text-gray-400 mt-0.5 relative z-10">
-                                    {{ selectedPlayer.roundsCount > 0 ? ((selectedPlayer.gridsDist[g] || 0) / selectedPlayer.roundsCount * 100).toFixed(1) : 0 }}%
+                                    {{ playerView.roundsCount > 0 ? ((playerView.gridsDist[g] || 0) / playerView.roundsCount * 100).toFixed(1) : 0 }}%
                                 </div>
                             </div>
                         </div>
@@ -754,39 +759,49 @@
 
                 <!-- 每日明細: 獨立在左側區塊之外, 由早到晚, 天數多時自己捲動 -->
                 <div class="w-full lg:w-64 shrink-0 lg:border-l lg:border-white/10 lg:pl-6">
-                    <div class="flex items-baseline justify-between mb-3">
-                        <h4 class="text-sm font-bold text-gray-300">每日明細</h4>
-                        <span class="text-[10px] text-gray-500">{{ playerDays.length }} 天</span>
+                    <div class="flex items-baseline justify-between mb-2">
+                        <h4 class="text-sm font-bold text-gray-200">每日明細</h4>
+                        <span class="text-[10px] text-gray-400">{{ playerDays.length }} 天</span>
                     </div>
+                    <button @click="selectedDay = null"
+                        class="w-full mb-2 px-3 py-1.5 rounded-lg text-xs transition-colors border"
+                        :class="selectedDay === null ? 'bg-indigo-600 text-white border-indigo-500 font-bold'
+                                                     : 'text-gray-300 border-white/10 hover:bg-white/5'">
+                        全部 {{ playerDays.length }} 天
+                    </button>
+                    <p class="text-[10px] text-gray-400 mb-2">點卡片可只看那一天，左側統計會跟著變。</p>
                     <div v-if="!playerDays.length" class="text-xs text-gray-500 py-4">此範圍內沒有下注紀錄。</div>
                     <div v-else class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                        <div v-for="d in playerDays" :key="d.day"
-                            class="bg-slate-800/50 rounded-xl p-3 border border-white/5 hover:border-white/15 transition-colors">
+                        <div v-for="d in playerDays" :key="d.day" @click="selectedDay = (selectedDay === d.day ? null : d.day)"
+                            class="rounded-xl p-3 border transition-colors cursor-pointer"
+                            :class="selectedDay === d.day
+                                ? 'bg-indigo-600/25 border-indigo-400/60'
+                                : 'bg-slate-800/60 border-white/10 hover:border-white/25 hover:bg-slate-800'">
                             <div class="flex items-baseline justify-between mb-2">
-                                <span class="text-sm font-bold text-indigo-300">{{ d.day.slice(5) }}</span>
-                                <span class="text-[10px] text-gray-500">{{ d.rounds.toLocaleString() }} 局</span>
+                                <span class="text-sm font-bold" :class="selectedDay === d.day ? 'text-white' : 'text-indigo-300'">{{ d.day.slice(5) }}</span>
+                                <span class="text-[10px] text-gray-400">{{ d.rounds.toLocaleString() }} 局</span>
                             </div>
                             <div class="flex justify-between text-xs mb-1.5">
-                                <span class="text-gray-500">投注額</span>
+                                <span class="text-gray-400">投注額</span>
                                 <span class="font-bold text-white">{{ formatMoney(d.bet) }}</span>
                             </div>
                             <div class="flex justify-between text-xs">
-                                <span class="text-gray-500">初始</span>
-                                <span class="text-gray-400">{{ formatMoney(d.open) }}</span>
+                                <span class="text-gray-400">初始</span>
+                                <span class="text-gray-200">{{ formatMoney(d.open) }}</span>
                             </div>
                             <div class="flex justify-between text-xs">
-                                <span class="text-gray-500">結束</span>
+                                <span class="text-gray-400">結束</span>
                                 <span :class="d.close >= d.open ? 'text-green-400' : 'text-red-400'">{{ formatMoney(d.close) }}</span>
                             </div>
                             <div class="mt-2 pt-2 border-t border-white/5 flex justify-between text-xs">
-                                <span class="text-gray-500">餘額變化</span>
+                                <span class="text-gray-400">餘額變化</span>
                                 <span class="font-bold" :class="d.delta > 0 ? 'text-green-400' : (d.delta < 0 ? 'text-red-400' : 'text-gray-400')">
                                     {{ d.delta > 0 ? '+' : '' }}{{ formatMoney(d.delta) }}
                                 </span>
                             </div>
                         </div>
                     </div>
-                    <p class="text-[10px] text-gray-600 mt-3 leading-relaxed">
+                    <p class="text-[10px] text-gray-400 mt-3 leading-relaxed">
                         餘額取當日第一筆與最後一筆注單的快照，中間的存提款也會反映在差額裡，
                         所以「餘額變化」不等於當日輸贏。
                     </p>
@@ -802,7 +817,7 @@
 
                 <div class="p-6 border-b border-white/10 shrink-0">
                     <h3 class="text-2xl font-bold flex items-center gap-3 flex-wrap">
-                        <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-400 font-mono text-lg'">{{ displayName(selectedPlayer) }}</span>
+                        <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-600 italic font-normal text-xl'">{{ displayName(selectedPlayer) }}</span>
                         <span class="text-gray-400 font-normal">押注行為變化</span>
                     </h3>
                 </div>
@@ -1666,6 +1681,19 @@
                 watch(betTrendMode, (v) => store.set('livemines_trend_mode', v));
                 watch(betTrendSize, (v) => store.set('livemines_trend_size', v));
 
+                // 點某一天的卡片時, 左側統計只算那天 —— null 代表看全部
+                const selectedDay = ref(null);
+                watch(selectedPlayer, () => { selectedDay.value = null; });
+
+                const playerView = computed(() => {
+                    const p = selectedPlayer.value;
+                    if (!p) return null;
+                    if (!selectedDay.value) return p;
+                    const agg = blankPlayerAgg(p.account, p.agent);
+                    p.rounds.forEach(r => { if (gamingDay(r.wallTime) === selectedDay.value) addRoundToAgg(agg, r); });
+                    return finalizePlayerAgg(agg);
+                });
+
                 // 選中玩家的逐日明細, 由早到晚 —— 卡片是照這個順序疊的
                 const playerDays = computed(() => {
                     const p = selectedPlayer.value;
@@ -1768,6 +1796,69 @@
 
                 // 依目前的時間範圍, 從玩家單局重新聚合出所有玩家層級的統計。
                 // 匯入時算一次, 之後每次改範圍再算一次 —— 所以聚合邏輯只能有這一份。
+                // 玩家統計的聚合器。全站重算與「只看某一天」共用同一份邏輯 ——
+                // 兩邊各寫一次的話, 遲早會有一邊改到、另一邊沒改。
+                const blankPlayerAgg = (account, agent) => ({
+                    account, agent: agent || '',
+                    placeCounts: Array(9).fill(0),
+                    totalTurnover: 0, totalPayout: 0, winLoss: 0, totalGrids: 0,
+                    roundsCount: 0, totalHitRounds: 0, totalWinRounds: 0,
+                    exbetRounds: 0, exbetBet: 0, exbetRoundBet: 0, exbetRoundPayout: 0,
+                    plainRounds: 0, plainRoundBet: 0, plainRoundPayout: 0,
+                    rounds: [], gridsDist: {}, daily: {}
+                });
+
+                const addRoundToAgg = (p, r) => {
+                    p.totalTurnover += r.bet;
+                    p.totalPayout += r.payout;
+                    p.winLoss += r.winLoss;
+                    p.totalGrids += r.grids;   // r.grids 只含 1~9 的格注, EXBET 不算一格
+                    p.roundsCount += 1;
+                    if (r.payout > 0) p.totalHitRounds++;
+                    if (r.winLoss > 0) p.totalWinRounds++;
+                    if (r.places) for (let i = 0; i < 9; i++) p.placeCounts[i] += r.places[i];
+
+                    if (r.exbetCount > 0) {
+                        p.exbetRounds++;
+                        p.exbetBet += r.exbetBet;
+                        p.exbetRoundBet += r.bet;
+                        p.exbetRoundPayout += r.payout;
+                    } else {
+                        p.plainRounds++;
+                        p.plainRoundBet += r.bet;
+                        p.plainRoundPayout += r.payout;
+                    }
+                    p.rounds.push(r);
+
+                    // 逐營運日的投注與餘額。餘額取當日第一筆/最後一筆的快照,
+                    // 所以要依時間決定先後, 不能靠迴圈順序(rounds 尚未排序)。
+                    const day = gamingDay(r.wallTime);
+                    if (day) {
+                        let d = p.daily[day];
+                        if (!d) d = p.daily[day] = { bet: 0, rounds: 0, firstT: Infinity, lastT: -Infinity, open: null, close: null };
+                        d.bet += r.bet;
+                        d.rounds += 1;
+                        if (r.billTime < d.firstT) { d.firstT = r.billTime; d.open = r.balance; }
+                        if (r.billTime > d.lastT) { d.lastT = r.billTime; d.close = r.balance; }
+                    }
+
+                    const g = Math.min(9, r.grids);
+                    if (g >= 1) p.gridsDist[g] = (p.gridsDist[g] || 0) + 1;
+                };
+
+                const finalizePlayerAgg = (p) => {
+                    p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
+                    p.rounds.sort((a, b) => a.billTime - b.billTime);
+                    p.align = alignmentOf(p.rounds);
+                    p.alignRounds = p.align ? p.align.evaluable : 0;
+                    p.alignScore = (p.align && p.align.reliable) ? p.align.score : null;
+                    p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
+                    p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
+                    p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
+                    p.exbetWinLoss = p.exbetRoundPayout - p.exbetRoundBet;
+                    return p;
+                };
+
                 const rebuildFromRounds = () => {
                     const rounds = activeRounds.value;
                     const playerAgg = {};
@@ -1778,56 +1869,11 @@
 
                     rounds.forEach(r => {
                         let p = playerAgg[r.account];
-                        if (!p) {
-                            p = playerAgg[r.account] = {
-                                account: r.account,
-                                agent: r.agent || '',
-                                placeCounts: Array(9).fill(0),
-                                totalTurnover: 0, totalPayout: 0, winLoss: 0, totalGrids: 0,
-                                roundsCount: 0, totalHitRounds: 0, totalWinRounds: 0,
-                                exbetRounds: 0, exbetBet: 0, exbetRoundBet: 0, exbetRoundPayout: 0,
-                                plainRounds: 0, plainRoundBet: 0, plainRoundPayout: 0,
-                                rounds: [], gridsDist: {}, daily: {}
-                            };
-                        }
-                        p.totalTurnover += r.bet;
-                        p.totalPayout += r.payout;
-                        p.winLoss += r.winLoss;
-                        p.totalGrids += r.grids;   // r.grids 只含 1~9 的格注, EXBET 不算一格
-                        p.roundsCount += 1;
-                        if (r.payout > 0) p.totalHitRounds++;
-                        if (r.winLoss > 0) p.totalWinRounds++;
-                        if (r.places) for (let i = 0; i < 9; i++) p.placeCounts[i] += r.places[i];
+                        if (!p) p = playerAgg[r.account] = blankPlayerAgg(r.account, r.agent);
+                        addRoundToAgg(p, r);
 
-                        if (r.exbetCount > 0) {
-                            p.exbetRounds++;
-                            p.exbetBet += r.exbetBet;
-                            p.exbetRoundBet += r.bet;
-                            p.exbetRoundPayout += r.payout;
-                        } else {
-                            p.plainRounds++;
-                            p.plainRoundBet += r.bet;
-                            p.plainRoundPayout += r.payout;
-                        }
-                        p.rounds.push(r);
-
-                        // 逐營運日的投注與餘額。餘額取當日第一筆/最後一筆的快照,
-                        // 所以要依時間決定先後, 不能靠迴圈順序(rounds 尚未排序)。
-                        const day = gamingDay(r.wallTime);
-                        if (day) {
-                            let d = p.daily[day];
-                            if (!d) d = p.daily[day] = { bet: 0, rounds: 0, firstT: Infinity, lastT: -Infinity, open: null, close: null };
-                            d.bet += r.bet;
-                            d.rounds += 1;
-                            if (r.billTime < d.firstT) { d.firstT = r.billTime; d.open = r.balance; }
-                            if (r.billTime > d.lastT) { d.lastT = r.billTime; d.close = r.balance; }
-                        }
-
-                        const g = Math.min(9, r.grids);
-                        if (g >= 1) {
-                            dist[g]++;
-                            p.gridsDist[g] = (p.gridsDist[g] || 0) + 1;
-                        }
+                        const g0 = Math.min(9, r.grids);
+                        if (g0 >= 1) dist[g0]++;
 
                         // 冷熱區看的是「物理賽果」, 同一局多位玩家只能算一次
                         if (!seenGames.has(r.gameCode)) {
@@ -1846,20 +1892,7 @@
 
                     ballCache.clear(); // 換時間範圍時賽果來源可能已不同
 
-                    Object.values(playerAgg).forEach(p => {
-                        p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
-                        p.rounds.sort((a, b) => a.billTime - b.billTime);
-                        // 契合度算一次存起來, 排行榜要排序它, 不能每次 render 重算。
-                        // 局數不足統計意義的一律視為「沒有分數」—— 若給個灰字分數還讓它參與排序,
-                        // 只玩兩局全中的人會拿 100 分衝上榜首, 排序就失去意義了。
-                        p.align = alignmentOf(p.rounds);
-                        p.alignRounds = p.align ? p.align.evaluable : 0;
-                        p.alignScore = (p.align && p.align.reliable) ? p.align.score : null;
-                        p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
-                        p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
-                        p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
-                        p.exbetWinLoss = p.exbetRoundPayout - p.exbetRoundBet;
-                    });
+                    Object.values(playerAgg).forEach(finalizePlayerAgg);
 
                     gridsBetDist.value = dist;
                     ballCounts.value = balls;
@@ -2690,8 +2723,11 @@
                 // 但不對外宣稱它「就是現用名」—— 其餘的一律保留, 搜尋與 tooltip 都吃得到。
                 const nicknameOf = (player) => nicknamesOf(player)[0] || null;
 
-                // 有暱稱就顯示暱稱, 沒有就退回帳號 —— 帳號本身就是可辨識的, 硬掛「未命名」只是多一層雜訊
-                const displayName = (player) => nicknameOf(player) || player.account;
+                // 沒有暱稱時給一個固定的佔位字, 而不是把帳號塞進暱稱的位置 ——
+                // 帳號長度和字體都跟暱稱差很多, 混在同一個欄位會讓整排對不齊。
+                // 帳號一律另外顯示在下一行, 所以每一列的結構都一樣。
+                const NO_NICKNAME_LABEL = '未設定暱稱';
+                const displayName = (player) => nicknameOf(player) || NO_NICKNAME_LABEL;
 
                 // 搜尋命中的若是舊名, 把那個舊名撈出來顯示, 否則使用者會不懂為什麼這筆會被搜到
                 const matchedAlias = (player) => {
@@ -2906,7 +2942,7 @@
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
-                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays,
+                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays, playerView, selectedDay,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
