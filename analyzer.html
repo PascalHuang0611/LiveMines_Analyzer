@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.13</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.14</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -392,6 +392,21 @@
                             <span class="text-gray-400">參與人次</span>
                             <span class="font-bold text-white">{{ clusterStats[seg]?.rounds.toLocaleString() || 0 }}</span>
                         </div>
+                        <div class="flex justify-between text-sm cursor-help"
+                            :title="`該群有用過 EXBET 的玩家數\n分子: ${clusterStats[seg]?.exbetPlayers?.toLocaleString() || 0}\n分母 (該群玩家數): ${clusterStats[seg]?.count?.toLocaleString() || 0}`">
+                            <span class="text-gray-400 border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">用過 EXBET 玩家</span>
+                            <span class="font-bold text-pink-300">
+                                {{ clusterStats[seg]?.count > 0 ? (clusterStats[seg].exbetPlayers / clusterStats[seg].count * 100).toFixed(1) : '0.0' }}%
+                                <span class="text-xs text-gray-500 font-normal">({{ clusterStats[seg]?.exbetPlayers?.toLocaleString() || 0 }} 人)</span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between text-sm cursor-help"
+                            :title="`有押 EXBET 的局數占該群所有參與人次的比例\n分子: ${clusterStats[seg]?.exbetRounds?.toLocaleString() || 0}\n分母 (總參與人次): ${clusterStats[seg]?.rounds?.toLocaleString() || 0}`">
+                            <span class="text-gray-400 border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">EXBET 局數占比</span>
+                            <span class="font-bold text-pink-300">
+                                {{ clusterStats[seg]?.rounds > 0 ? (clusterStats[seg].exbetRounds / clusterStats[seg].rounds * 100).toFixed(1) : '0.0' }}%
+                            </span>
+                        </div>
                     </div>
 
                     <!-- 該群的九宮格押注偏好 -->
@@ -505,11 +520,15 @@
                                 <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('roundsCount')">
                                     遊玩局數 ↕
                                 </th>
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('alignScore')"
+                                    title="下注格位與開獎的契合度。0 = 與隨機挑格無異，100 = 押 3 格且 3 顆全中的水準。&#10;全押 9 格的局不列入評估。局數少的分數不可信，已標示。">
+                                    契合度 ↕
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="!filteredPlayers.length">
-                                <td colspan="6" class="p-8 text-center text-gray-500">
+                                <td colspan="7" class="p-8 text-center text-gray-500">
                                     找不到{{ nicknameCount ? '暱稱或帳號' : '帳號' }}包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
                                 </td>
                             </tr>
@@ -542,6 +561,20 @@
                                 </td>
                                 <td class="p-3">{{ (player.totalTurnover > 0 ? (player.totalPayout / player.totalTurnover * 100) : 0).toFixed(2) }}%</td>
                                 <td class="p-3">{{ player.roundsCount.toLocaleString() }}</td>
+                                <td class="p-3">
+                                    <template v-if="player.alignScore === null">
+                                        <span class="text-gray-600" title="沒有可評估的局（全押 9 格或無格注）">—</span>
+                                    </template>
+                                    <template v-else>
+                                        <span class="font-bold"
+                                            :class="player.alignRounds < 30 ? 'text-gray-500'
+                                                : (player.alignScore > 0 ? 'text-amber-300' : 'text-slate-400')">
+                                            {{ player.alignScore.toFixed(1) }}
+                                        </span>
+                                        <span v-if="player.alignRounds < 30" class="text-[10px] text-gray-600 ml-1"
+                                            :title="`僅 ${player.alignRounds} 局可評估，樣本不足`">?</span>
+                                    </template>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -1452,14 +1485,24 @@
                 // 作法: 拿實際命中的球數, 對比「隨機挑同樣多格」的期望命中數。
                 //   某局押 k 格、開 n 顆球 -> 隨機挑 k 格時每顆球落在其中的機率是 k/9, 期望命中 n*k/9。
                 // 指數 = 實際命中 / 期望命中。押滿 9 格時分子分母都等於 n, 指數恰好 1.00 —— 全押得不到分數。
+                // 每局的球只解析一次 —— 全站算契合度時會走過數萬局, 重複 split 很浪費
+                const ballCache = new Map();
+                const ballsOf = (gameCode) => {
+                    if (ballCache.has(gameCode)) return ballCache.get(gameCode);
+                    const g = physicalGames.value[gameCode];
+                    const parsed = g
+                        ? String(g.rawRes).split(',').map(x => parseInt(x)).filter(n => n >= 1 && n <= 9)
+                        : [];
+                    ballCache.set(gameCode, parsed);
+                    return parsed;
+                };
+
                 const roundAlignment = (round) => {
-                    const g = physicalGames.value[round.gameCode];
-                    if (!g || !round.places) return null;
+                    if (!round.places) return null;
                     const chosen = [];
                     for (let i = 0; i < 9; i++) if (round.places[i] > 0) chosen.push(i + 1);
                     const k = chosen.length;
-                    const balls = String(g.rawRes).split(',')
-                        .map(x => parseInt(x)).filter(n => n >= 1 && n <= 9);
+                    const balls = ballsOf(round.gameCode);
                     if (!k || !balls.length) return null;
 
                     const n = balls.length, p = k / 9;
@@ -1669,9 +1712,15 @@
                         }
                     });
 
+                    ballCache.clear(); // 換時間範圍時賽果來源可能已不同
+
                     Object.values(playerAgg).forEach(p => {
                         p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
                         p.rounds.sort((a, b) => a.billTime - b.billTime);
+                        // 契合度算一次存起來, 排行榜要排序它, 不能每次 render 重算
+                        p.align = alignmentOf(p.rounds);
+                        p.alignScore = p.align ? p.align.score : null;
+                        p.alignRounds = p.align ? p.align.evaluable : 0;
                         p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
                         p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
                         p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
@@ -1882,7 +1931,7 @@
                 };
 
                 const computeClusters = () => {
-                    const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0) });
+                    const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0 });
                     const clusters = {
                         '高價值玩家': initStats(),
                         '中階玩家': initStats(),
@@ -1907,6 +1956,8 @@
                         clusters[segment].rounds += p.roundsCount;
                         clusters[segment].hitRounds += p.totalHitRounds;
                         clusters[segment].winRounds += p.totalWinRounds;
+                        clusters[segment].exbetRounds += p.exbetRounds;
+                        if (p.exbetRounds > 0) clusters[segment].exbetPlayers += 1;
                     });
                     
                     clusterStats.value = clusters;
@@ -2123,8 +2174,17 @@
 
                 const sortedPlayers = computed(() => {
                     const arr = Object.values(playersMap.value);
+                    const key = sortKey.value;
                     arr.sort((a, b) => {
-                        return sortDesc.value ? b[sortKey.value] - a[sortKey.value] : a[sortKey.value] - b[sortKey.value];
+                        const av = a[key], bv = b[key];
+                        // 沒有分數的玩家(例如全押、局數不足)一律墊底, 不管升冪降冪 ——
+                        // 否則升冪排序時整個榜首會是一排「—」
+                        const aNull = av === null || av === undefined || Number.isNaN(av);
+                        const bNull = bv === null || bv === undefined || Number.isNaN(bv);
+                        if (aNull && bNull) return 0;
+                        if (aNull) return 1;
+                        if (bNull) return -1;
+                        return sortDesc.value ? bv - av : av - bv;
                     });
                     return arr;
                 });
