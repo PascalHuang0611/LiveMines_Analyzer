@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.09</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.10</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1063,9 +1063,17 @@
 
                         <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
                             <div class="font-bold text-white mb-1">被長局卡住的時間</div>
-                            <p class="text-xs text-gray-500 mb-4">一般一局 {{ Math.round(houseStats.medianDur) }} 秒；下列各局遠超此值，期間開不了新局。</p>
+                            <p class="text-xs text-gray-500 mb-4">
+                                一般一局 {{ Math.round(houseStats.medianDur) }} 秒；下列各局遠超此值，期間開不了新局。
+                                <span v-if="houseStats.maintenanceCount" class="text-gray-600">
+                                    每日例行維護造成的 {{ houseStats.maintenanceCount }} 局（合計 {{ fmtHours(houseStats.maintenanceSeconds) }}）已排除。
+                                </span>
+                            </p>
                             <div v-if="!houseStats.longCount" class="text-sm text-green-400 py-4">
                                 沒有異常長的局，開局節奏正常。
+                                <span v-if="houseStats.maintenanceCount" class="text-gray-500 block mt-1 text-xs">
+                                    （{{ houseStats.maintenanceCount }} 局落在每日維護時段，屬正常停機，未列入）
+                                </span>
                             </div>
                             <template v-else>
                             <div class="text-3xl font-bold text-white mb-1">{{ fmtHours(houseStats.lostSeconds) }}</div>
@@ -1086,7 +1094,7 @@
                             </table>
                             </template>
                             <p v-if="houseStats.longCount" class="text-xs text-gray-500 mt-3">
-                                這不是機器停機 — 局與局之間的銜接一直是正常的。要問的是「為什麼有局會跑這麼久」。
+                                已排除每日例行維護。這些不是機器停機 — 局與局之間的銜接一直是正常的，要問的是「為什麼這幾局會跑這麼久」。
                             </p>
                         </div>
                     </div>
@@ -2043,6 +2051,11 @@
                     return { bill: b, game: g, summary: parts.join('、'), impact, severe };
                 });
 
+                // 每天早上的例行維護時段(分鐘, 由 00:00 起算)。實測維護會從 06:5x 拖到 09:2x,
+                // 所以抓寬一點, 只用來把「維護造成的長局」跟真正的異常長局分開。
+                const MAINTENANCE_FROM = 6 * 60 + 30;
+                const MAINTENANCE_TO = 9 * 60 + 30;
+
                 // ===== 大盤分析 (只吃 game_results, 不與注單檔交叉) =====
                 const houseStats = computed(() => {
                     const raw = gameResultsData.value || [];
@@ -2115,16 +2128,32 @@
                     const roundsDown = approved.filter(r => n(r['Endtime Players']) < n(r['Bettime Players'])).length;
 
                     // --- 節奏: 長局會卡住開局, 是可回收的營收缺口 ---
+                    // 但每天早上的例行維護也會讓一局掛著跑很久, 那是正常的, 不能算進缺口。
+                    const inMaintenance = (wall) => {
+                        if (!wall) return false;
+                        const mins = parseInt(wall.slice(11, 13)) * 60 + parseInt(wall.slice(14, 16));
+                        return mins >= MAINTENANCE_FROM && mins <= MAINTENANCE_TO;
+                    };
                     const durations = [];
                     byTime.forEach(r => {
                         if (!r['End Time']) return;
                         const d = (new Date(r['End Time']) - new Date(r['Start Time'])) / 1000;
-                        if (d > 0) durations.push({ code: r['Game Code'], time: String(r['Start Time']).replace('T', ' ').slice(0, 19), sec: d });
+                        if (d <= 0) return;
+                        const startWall = String(r['Start Time']).replace('T', ' ').slice(0, 19);
+                        const endWall = String(r['End Time']).replace('T', ' ').slice(0, 19);
+                        durations.push({
+                            code: r['Game Code'], time: startWall, sec: d,
+                            // 起或迄落在維護時段就算維護 —— 實測維護會從 06:5x 拖到 09:2x, 不是剛好整點
+                            maintenance: inMaintenance(startWall) || inMaintenance(endWall)
+                        });
                     });
                     durations.sort((a, b) => a.sec - b.sec);
                     const medianDur = durations.length ? durations[Math.floor(durations.length / 2)].sec : 0;
-                    const longRounds = durations.filter(d => d.sec > medianDur * 10).reverse();
+                    const allLong = durations.filter(d => d.sec > medianDur * 10).reverse();
+                    const longRounds = allLong.filter(d => !d.maintenance);
+                    const maintenanceRounds = allLong.filter(d => d.maintenance);
                     const lostSeconds = longRounds.reduce((s, d) => s + (d.sec - medianDur), 0);
+                    const maintenanceSeconds = maintenanceRounds.reduce((s, d) => s + (d.sec - medianDur), 0);
 
                     const spanMs = new Date(byTime[byTime.length - 1]['Start Time']) - new Date(byTime[0]['Start Time']);
                     const spanHours = spanMs / 3600000;
@@ -2153,7 +2182,8 @@
                         cumulative, settleAt, midPoint,
                         bettime, endtime, betPlayer, convMedian, zeroBetRounds, roundsUp, roundsDown,
                         approvedRounds: approved.length,
-                        medianDur, longRounds: longRounds.slice(0, 5), longCount: longRounds.length, lostSeconds
+                        medianDur, longRounds: longRounds.slice(0, 5), longCount: longRounds.length, lostSeconds,
+                        maintenanceCount: maintenanceRounds.length, maintenanceSeconds
                     };
                 });
 
