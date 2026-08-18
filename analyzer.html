@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.16</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.17</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -495,7 +495,7 @@
                 </h3>
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4 -mt-2">
                     <p class="text-sm text-gray-400">
-                        支援向下滾動檢視所有玩家，或輸入{{ nicknameCount ? '暱稱／帳號' : '帳號' }}片段搜尋。
+                        支援上下捲動看所有玩家、左右捲動看每日明細，或輸入{{ nicknameCount ? '暱稱／帳號' : '帳號' }}片段搜尋。
                         <span v-if="nicknameCount" class="text-gray-500">
                             已對到 {{ nicknameCount.toLocaleString() }} / {{ sortedPlayers.length.toLocaleString() }} 個暱稱。
                         </span>
@@ -516,7 +516,7 @@
                     <table class="w-full text-center text-sm border-collapse">
                         <thead class="sticky top-0 z-10 bg-slate-900 shadow-md">
                             <tr class="text-indigo-200">
-                                <th class="p-3 text-left">玩家帳號</th>
+                                <th class="p-3 text-left sticky left-0 bg-slate-900 z-20">玩家帳號</th>
                                 <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('totalTurnover')">
                                     總流水 (Turnover) ↕
                                 </th>
@@ -536,16 +536,24 @@
                                     title="下注格位與開獎的契合度。0 = 與隨機挑格無異，100 = 押 3 格且 3 顆全中的水準。&#10;全押 9 格的局不列入評估。可評估局數未達門檻者顯示「—」，排序時一律墊底。">
                                     契合度 ↕
                                 </th>
+                                <template v-for="(d, di) in rangeDays" :key="'h'+d">
+                                    <th class="p-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400"
+                                        :class="di === 0 ? 'border-l-2 border-white/15' : 'border-l border-white/5'">
+                                        <span class="text-indigo-200 font-bold">{{ d.slice(5) }}</span> 投注
+                                    </th>
+                                    <th class="p-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400">初始餘額</th>
+                                    <th class="p-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400">結束餘額</th>
+                                </template>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="!filteredPlayers.length">
-                                <td colspan="7" class="p-8 text-center text-gray-500">
+                                <td :colspan="7 + rangeDays.length * 3" class="p-8 text-center text-gray-500">
                                     找不到{{ nicknameCount ? '暱稱或帳號' : '帳號' }}包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
                                 </td>
                             </tr>
                             <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-                                <td class="p-3 text-left">
+                                <td class="p-3 text-left sticky left-0 bg-slate-900 z-10">
                                     <div class="font-bold flex items-center gap-1.5" :class="nicknameOf(player) ? 'text-indigo-300' : 'text-gray-400 font-mono text-xs'">
                                         <span>
                                             <span v-for="(part, i) in highlightParts(displayName(player))" :key="i"
@@ -583,6 +591,25 @@
                                         {{ player.alignScore.toFixed(1) }}
                                     </span>
                                 </td>
+                                <template v-for="(d, di) in rangeDays" :key="'d'+d">
+                                    <td class="p-3 text-right whitespace-nowrap"
+                                        :class="di === 0 ? 'border-l-2 border-white/15' : 'border-l border-white/5'">
+                                        <span v-if="player.daily[d]" class="text-gray-300">{{ formatMoney(player.daily[d].bet) }}</span>
+                                        <span v-else class="text-gray-700">—</span>
+                                    </td>
+                                    <td class="p-3 text-right whitespace-nowrap text-gray-400">
+                                        <span v-if="player.daily[d] && player.daily[d].open !== null">{{ formatMoney(player.daily[d].open) }}</span>
+                                        <span v-else class="text-gray-700">—</span>
+                                    </td>
+                                    <td class="p-3 text-right whitespace-nowrap">
+                                        <template v-if="player.daily[d] && player.daily[d].close !== null">
+                                            <span :class="player.daily[d].close >= player.daily[d].open ? 'text-green-400' : 'text-red-400'">
+                                                {{ formatMoney(player.daily[d].close) }}
+                                            </span>
+                                        </template>
+                                        <span v-else class="text-gray-700">—</span>
+                                    </td>
+                                </template>
                             </tr>
                         </tbody>
                     </table>
@@ -1105,7 +1132,7 @@
                                 <h4 class="text-sm font-bold text-gray-300">{{ t.key }}</h4>
                                 <span class="text-[10px] cursor-help"
                                     :class="t.chi > 15.51 ? 'text-amber-400' : 'text-gray-500'"
-                                    title="卡方檢定 (df=8)，5% 臨界值 15.51。超過代表分布不均勻的程度已超出隨機波動。">
+                                    :title="`卡方檢定 (df=8)，5% 臨界值 15.51。\n已除以 design effect ${houseStats.ballPattern.deff.toFixed(3)} —— 同一局的 3 顆球不是 3 個獨立觀測，不校正會高估顯著性。`">
                                     卡方 {{ t.chi.toFixed(1) }}{{ t.chi > 15.51 ? ' ⚠' : '' }}
                                 </span>
                             </div>
@@ -1123,8 +1150,11 @@
                                         <td class="py-1 text-right text-gray-400">{{ c.count.toLocaleString() }}</td>
                                         <td class="py-1 text-right text-gray-300">{{ c.pct.toFixed(2) }}%</td>
                                         <td class="py-1 text-right font-bold"
-                                            :class="Math.abs(c.z) >= 2 ? (c.z > 0 ? 'text-amber-400' : 'text-sky-400') : 'text-gray-600'">
-                                            {{ c.z > 0 ? '+' : '' }}{{ c.z.toFixed(2) }}
+                                            :class="c.strong ? (c.z > 0 ? 'text-amber-400' : 'text-sky-400')
+                                                : (Math.abs(c.z) >= 2 ? (c.z > 0 ? 'text-amber-400/50' : 'text-sky-400/50') : 'text-gray-600')"
+                                            :title="c.strong ? '通過 9 格同時檢定的 Bonferroni 門檻 (|z|>2.77)'
+                                                : (Math.abs(c.z) >= 2 ? '單看是偏離，但九格一起檢定時撐不過門檻' : '')">
+                                            {{ c.z > 0 ? '+' : '' }}{{ c.z.toFixed(2) }}{{ c.strong ? ' ●' : '' }}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -1136,6 +1166,12 @@
                     </div>
 
                     <p class="text-xs text-gray-500 mt-4 leading-relaxed">
+                        <span class="text-gray-400">● 標記</span>代表該格通過九格同時檢定的門檻（|z| &gt; 2.77）；
+                        只有 |z| ≥ 2 的以淡色呈現 —— 九格一起看時，光是 2 個標準差還撐不住。
+                        所有卡方與 z 都已除以 design effect
+                        <span class="text-gray-400">{{ houseStats.ballPattern.deff.toFixed(3) }}</span>
+                        （同一局的 3 顆球會互相牽動，不是 3 個獨立觀測）。
+                        <br>
                         內部對照：雙同球局裡「落單那一顆」的落點卡方為
                         <span class="font-bold text-gray-400">{{ houseStats.ballPattern.oddChi.toFixed(1) }}</span>。
                         若它接近均勻而重複的那顆明顯偏斜，代表偏誤集中在「重複」這件事上，而不是整體落球都偏。
@@ -1343,6 +1379,11 @@
                         && rangeTo.value === d[d.length - 1]
                         && rangeFrom.value === d[Math.max(0, d.length - n)];
                 };
+
+                // 排行榜要橫向展開的日子 —— 只列目前範圍內的, 這樣縮小範圍就能控制表格寬度
+                const rangeDays = computed(() =>
+                    availableDays.value.filter(d =>
+                        (!rangeFrom.value || d >= rangeFrom.value) && (!rangeTo.value || d <= rangeTo.value)));
 
                 const rangeIsFull = computed(() => {
                     const d = availableDays.value;
@@ -1689,7 +1730,7 @@
                                 roundsCount: 0, totalHitRounds: 0, totalWinRounds: 0,
                                 exbetRounds: 0, exbetBet: 0, exbetRoundBet: 0, exbetRoundPayout: 0,
                                 plainRounds: 0, plainRoundBet: 0, plainRoundPayout: 0,
-                                rounds: [], gridsDist: {}
+                                rounds: [], gridsDist: {}, daily: {}
                             };
                         }
                         p.totalTurnover += r.bet;
@@ -1712,6 +1753,18 @@
                             p.plainRoundPayout += r.payout;
                         }
                         p.rounds.push(r);
+
+                        // 逐營運日的投注與餘額。餘額取當日第一筆/最後一筆的快照,
+                        // 所以要依時間決定先後, 不能靠迴圈順序(rounds 尚未排序)。
+                        const day = gamingDay(r.wallTime);
+                        if (day) {
+                            let d = p.daily[day];
+                            if (!d) d = p.daily[day] = { bet: 0, rounds: 0, firstT: Infinity, lastT: -Infinity, open: null, close: null };
+                            d.bet += r.bet;
+                            d.rounds += 1;
+                            if (r.billTime < d.firstT) { d.firstT = r.billTime; d.open = r.balance; }
+                            if (r.billTime > d.lastT) { d.lastT = r.billTime; d.close = r.balance; }
+                        }
 
                         const g = Math.min(9, r.grids);
                         if (g >= 1) {
@@ -2409,20 +2462,53 @@
                             z: sd > 0 ? (pct - specPct) / sd : 0
                         };
                     };
+                    // 同一局的 3 顆球不是 3 個獨立觀測 —— 它們會擠在一起(重複球遠多於獨立抽樣),
+                    // 所以把球數當獨立樣本算卡方會系統性高估顯著性。
+                    // design effect = 各格「每局落在該格的球數」的實證變異 / 獨立假設下的變異, 取九格平均。
+                    // 卡方除以它才是可用的值。這個值必須隨資料重算, 不能寫死。
+                    const designEffect = (() => {
+                        if (!patternRounds) return 1;
+                        const perRound = [];
+                        approved.forEach(r => {
+                            const b = String(r['Result']).split(',').map(x => parseInt(x)).filter(x => x >= 1 && x <= 9);
+                            if (b.length === 3) perRound.push(b);
+                        });
+                        const totalBalls = perRound.length * 3;
+                        if (!totalBalls) return 1;
+                        let sum = 0;
+                        for (let j = 1; j <= 9; j++) {
+                            const p = balls9[j - 1] / totalBalls;
+                            const varIid = 3 * p * (1 - p);
+                            if (varIid <= 0) { sum += 1; continue; }
+                            const xs = perRound.map(b => b.filter(x => x === j).length);
+                            const mean = xs.reduce((a, x) => a + x, 0) / xs.length;
+                            const varEmp = xs.reduce((a, x) => a + (x - mean) * (x - mean), 0) / xs.length;
+                            sum += varEmp / varIid;
+                        }
+                        return sum / 9 || 1;
+                    })();
+
                     const chiSq = (counts) => {
                         const total = counts.reduce((a, b) => a + b, 0);
                         if (!total) return 0;
                         const e = total / 9;
-                        return counts.reduce((s, o) => s + Math.pow(o - e, 2) / e, 0);
+                        const raw = counts.reduce((s, o) => s + Math.pow(o - e, 2) / e, 0);
+                        return raw / designEffect;
                     };
                     const cellRows = (counts) => {
                         const total = counts.reduce((a, b) => a + b, 0);
                         const e = total / 9;
-                        return counts.map((c, i) => ({
-                            place: i + 1, count: c,
-                            pct: total ? c / total * 100 : 0,
-                            z: e > 0 ? (c - e) / Math.sqrt(e * (1 - 1 / 9)) : 0
-                        }));
+                        return counts.map((c, i) => {
+                            const z = e > 0 ? (c - e) / Math.sqrt(e * (1 - 1 / 9)) / Math.sqrt(designEffect) : 0;
+                            return {
+                                place: i + 1, count: c,
+                                pct: total ? c / total * 100 : 0,
+                                z,
+                                // 九格同時檢定, Bonferroni 門檻 α=0.05/9 -> |z|>2.77。
+                                // 只過 2 就標紅的話會有六格變紅, 讀者會以為整盤都壞了。
+                                strong: Math.abs(z) > 2.77
+                            };
+                        });
                     };
                     const ballPattern = {
                         rounds: patternRounds,
@@ -2431,7 +2517,7 @@
                         triple: patternRow(pattern.triple, BALL_PATTERN_SPEC.triple),
                         pairCells: cellRows(pairCells), pairChi: chiSq(pairCells),
                         tripleCells: cellRows(tripleCells), tripleChi: chiSq(tripleCells),
-                        oddChi: chiSq(oddCells),
+                        oddChi: chiSq(oddCells), deff: designEffect,
                         allCells: cellRows(balls9), allChi: chiSq(balls9)
                     };
 
@@ -2452,10 +2538,11 @@
                         const c = Array(9).fill(0);
                         slice.forEach(x => x.b.forEach(n => c[n - 1]++));
                         const total = c.reduce((a, b) => a + b, 0);
+                        if (total < 45) continue; // 每格期望 <5 時卡方本來就不成立
                         const chi = c.reduce((s, o, j) => {
                             const e = total * overallP[j];
                             return e > 0 ? s + Math.pow(o - e, 2) / e : s;
-                        }, 0);
+                        }, 0) / designEffect; // 同上: 同局三球不獨立, 不除 deff 會一直誤報
                         tested.push({
                             from: slice[0].t, to: slice[slice.length - 1].t,
                             rounds: slice.length, chi, p: pChiDf8(chi),
@@ -2749,7 +2836,7 @@
                     activeTab, hasGameData, gameResultsData,
                     houseStats, fmtInt, fmtHours, alignMinRounds: ALIGN_MIN_ROUNDS, ballWindowSize, ballWindowOptions: BALL_WINDOW_OPTIONS,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
-                    rangeFrom, rangeTo, availableDays, rangeIsFull, resetRange, activeRounds, allRounds,
+                    rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     dayCutoverHour: DAY_CUTOVER_HOUR,
                     setLastDays, isLastDays,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
