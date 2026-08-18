@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.99</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.00</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -237,10 +237,10 @@
             <div class="text-sm">
                 <span class="text-amber-300 font-bold">已略過 {{ duplicateBills.toLocaleString() }} 筆重複注單</span>
                 <span class="text-gray-400">
-                    — 後台匯出分頁時，換頁邊界（NO 每滿一萬）的注單會重複輸出。相同 Bill No 只採計一次，以下統計已排除重複。
+                    — 這份匯出檔中有相同 Bill No 出現多次的情形。同一張注單只採計一次，以下統計已排除重複。
                 </span>
                 <div class="text-xs text-gray-500 mt-1">
-                    註：同一個換頁動作也可能造成漏列，漏掉的注單無法從這份檔案還原，需請後台重新匯出。
+                    若需要完整資料，建議重新匯出一份再比對。
                 </div>
             </div>
         </div>
@@ -1055,8 +1055,8 @@
                     let parsedBills = false;
                     let parsedGames = false;
 
-                    // 後台匯出分頁時, 換頁邊界 (NO 每滿一萬) 的注單會重複輸出 —— 已確認是後台的 BUG。
-                    // 同一張 Bill No 只採計一次, 否則那幾局的流水與派彩會被算兩遍。
+                    // 匯出檔可能含重複的注單列。同一張 Bill No 只採計一次,
+                    // 否則那幾局的流水與派彩會被算兩遍。
                     const seenBillNos = new Set();
                     duplicateBills.value = 0;
 
