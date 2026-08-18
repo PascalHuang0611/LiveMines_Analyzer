@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.08</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.09</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -251,15 +251,31 @@
                     :class="rangeIsFull ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
                     全部 {{ availableDays.length }} 天
                 </button>
-                <button v-for="d in availableDays" :key="'q'+d" @click="rangeFrom = d; rangeTo = d"
-                    class="px-2.5 py-1 rounded text-xs transition-colors border"
-                    :class="rangeFrom === d && rangeTo === d ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
-                    {{ d.slice(5) }}
-                </button>
+
+                <!-- 天數不多時逐日列出最好用; 天數一多就會擠成一面按鈕牆, 改用相對區間 -->
+                <template v-if="availableDays.length <= 10">
+                    <button v-for="d in availableDays" :key="'q'+d" @click="rangeFrom = d; rangeTo = d"
+                        class="px-2.5 py-1 rounded text-xs transition-colors border"
+                        :class="rangeFrom === d && rangeTo === d ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
+                        {{ d.slice(5) }}
+                    </button>
+                </template>
+                <template v-else>
+                    <button v-for="n in [1, 3, 7, 14, 30]" :key="'l'+n" v-show="n < availableDays.length"
+                        @click="setLastDays(n)"
+                        class="px-2.5 py-1 rounded text-xs transition-colors border"
+                        :class="isLastDays(n) ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
+                        最近 {{ n }} 天
+                    </button>
+                </template>
             </div>
 
-            <div v-if="!rangeIsFull" class="text-xs text-amber-400 ml-auto">
-                已篩選 · 兩個分頁的數字都只計入此範圍
+            <div class="text-xs ml-auto text-right">
+                <div v-if="!rangeIsFull" class="text-amber-400">已篩選 · 兩個分頁的數字都只計入此範圍</div>
+                <div class="text-gray-500">
+                    此範圍 {{ activeRounds.length.toLocaleString() }} 筆玩家單局
+                    <span v-if="!rangeIsFull" class="text-gray-600">／ 全部 {{ allRounds.length.toLocaleString() }}</span>
+                </div>
             </div>
         </div>
 
@@ -1142,6 +1158,20 @@
                     rangeTo.value = d.length ? d[d.length - 1] : '';
                 };
 
+                // 「最近 N 天」是以資料裡最後一天回推, 不是以今天回推 —— 匯出檔通常不是即時的
+                const setLastDays = (n) => {
+                    const d = availableDays.value;
+                    if (!d.length) return;
+                    rangeFrom.value = d[Math.max(0, d.length - n)];
+                    rangeTo.value = d[d.length - 1];
+                };
+                const isLastDays = (n) => {
+                    const d = availableDays.value;
+                    return d.length > 0
+                        && rangeTo.value === d[d.length - 1]
+                        && rangeFrom.value === d[Math.max(0, d.length - n)];
+                };
+
                 const rangeIsFull = computed(() => {
                     const d = availableDays.value;
                     return !d.length || (rangeFrom.value === d[0] && rangeTo.value === d[d.length - 1]);
@@ -1220,7 +1250,7 @@
                     : (savedTrendMode === 'time' ? 30 : 5));
 
                 const BET_TREND_OPTIONS = {
-                    rounds: [{ v: 5, t: '每 5 局' }, { v: 10, t: '每 10 局' }, { v: 25, t: '每 25 局' }, { v: 50, t: '每 50 局' }],
+                    rounds: [{ v: 5, t: '每 5 局' }, { v: 10, t: '每 10 局' }, { v: 25, t: '每 25 局' }, { v: 50, t: '每 50 局' }, { v: 100, t: '每 100 局' }],
                     time: [{ v: 15, t: '每 15 分鐘' }, { v: 30, t: '每 30 分鐘' }, { v: 60, t: '每 1 小時' }, { v: 180, t: '每 3 小時' }]
                 };
 
@@ -2371,6 +2401,7 @@
                     houseStats, fmtInt, fmtHours,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     rangeFrom, rangeTo, availableDays, rangeIsFull, resetRange, activeRounds, allRounds,
+                    setLastDays, isLastDays,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
