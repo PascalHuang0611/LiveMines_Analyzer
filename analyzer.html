@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.02</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.03</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -713,10 +713,41 @@
                 </div>
 
                 <div class="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-6 pt-2">
-                    <!-- 圖: 區間多的時候橫向捲動 -->
-                    <div class="flex-1 min-w-0 min-h-0 overflow-x-auto overflow-y-hidden">
-                        <div :style="{ minWidth: '100%', width: Math.max(600, betTrendBuckets.length * 46) + 'px', height: '100%' }">
-                            <canvas id="betTrendChart"></canvas>
+                    <!-- 押注 vs 開獎 的格位分布對照; 區間多的時候整塊橫向捲動 -->
+                    <div class="flex-1 min-w-0 min-h-0 overflow-auto">
+                        <div :style="{ minWidth: Math.max(560, betTrendBuckets.length * 34 + 60) + 'px' }">
+
+                            <div class="text-xs font-bold text-indigo-300 mb-1 sticky left-0">玩家押注的格位分布</div>
+                            <div class="text-[10px] text-gray-500 mb-2 sticky left-0">每欄是一個區間，顏色深淺代表該格占該區間押注的比例</div>
+                            <div v-for="row in 9" :key="'b'+row" class="flex items-center gap-px mb-px">
+                                <div class="w-6 shrink-0 text-[10px] text-gray-500 text-right pr-1 sticky left-0 bg-slate-900/80">{{ row }}</div>
+                                <div v-for="(b, i) in betTrendBuckets" :key="i"
+                                    class="h-5 flex-1 min-w-[10px] rounded-sm cursor-help"
+                                    :style="heatCell(b.betPlaces[row-1], b.betTotal, 'rgba(99,102,241,').style"
+                                    :title="`${b.label}\n第 ${row} 格\n押注 ${b.betPlaces[row-1]} 次 / 該區間 ${b.betTotal} 次\n占比 ${(b.betTotal ? b.betPlaces[row-1]/b.betTotal*100 : 0).toFixed(1)}%`"></div>
+                            </div>
+
+                            <div class="text-xs font-bold text-emerald-300 mt-5 mb-1 sticky left-0">同期間大盤開出的球</div>
+                            <div class="text-[10px] text-gray-500 mb-2 sticky left-0">只統計這位玩家有參與的那些局，才能直接對照</div>
+                            <div v-for="row in 9" :key="'r'+row" class="flex items-center gap-px mb-px">
+                                <div class="w-6 shrink-0 text-[10px] text-gray-500 text-right pr-1 sticky left-0 bg-slate-900/80">{{ row }}</div>
+                                <div v-for="(b, i) in betTrendBuckets" :key="i"
+                                    class="h-5 flex-1 min-w-[10px] rounded-sm cursor-help"
+                                    :style="heatCell(b.resultPlaces[row-1], b.resultTotal, 'rgba(52,211,153,').style"
+                                    :title="`${b.label}\n第 ${row} 格\n開出 ${b.resultPlaces[row-1]} 次 / 該區間 ${b.resultTotal} 顆球\n占比 ${(b.resultTotal ? b.resultPlaces[row-1]/b.resultTotal*100 : 0).toFixed(1)}%`"></div>
+                            </div>
+
+                            <div class="flex items-center gap-px mt-2">
+                                <div class="w-6 shrink-0"></div>
+                                <div v-for="(b, i) in betTrendBuckets" :key="i"
+                                    class="flex-1 min-w-[10px] text-[8px] text-gray-600 text-center truncate"
+                                    :title="b.label">{{ betTrendBuckets.length <= 20 ? b.label : (i % 3 === 0 ? b.label : '') }}</div>
+                            </div>
+
+                            <div class="mt-4 text-[10px] text-gray-500 sticky left-0 leading-relaxed">
+                                兩塊圖的欄位一一對應。若上方深色的列與下方深色的列長期錯開，代表這位玩家偏好的格位與實際開獎無關；
+                                若跟著移動，才值得進一步檢查。單一區間的樣本很小，請看趨勢不要看單欄。
+                            </div>
                         </div>
                     </div>
 
@@ -1056,6 +1087,7 @@
                 const hotzoneMode = ref('ball'); // 'ball' or 'lightning'
 
                 const playersMap = ref({});
+                const physicalGames = ref({}); // gameCode -> { rawRes, rawLight }, 給押注/開獎對照用
                 const DEFAULT_HIGH_THRESHOLD = 200;
                 const DEFAULT_MID_THRESHOLD = 50;
 
@@ -1126,6 +1158,7 @@
                     if (!p || !p.rounds || !p.rounds.length) return [];
                     const rounds = [...p.rounds].sort((a, b) => a.billTime - b.billTime);
 
+                    const games = physicalGames.value || {};
                     const out = [];
                     const push = (label, list) => {
                         if (!list.length) return;
@@ -1134,12 +1167,31 @@
                         const winLoss = list.reduce((s, r) => s + r.winLoss, 0);
                         const grids = list.reduce((s, r) => s + r.grids, 0);
                         const exRounds = list.filter(r => r.exbetCount > 0).length;
+
+                        // 玩家在這段期間押了哪些格
+                        const betPlaces = Array(9).fill(0);
+                        // 同一批局實際開出哪些球 —— 對照組, 用來看玩家的偏好跟賽果有沒有關係
+                        const resultPlaces = Array(9).fill(0);
+                        list.forEach(r => {
+                            if (r.places) for (let i = 0; i < 9; i++) betPlaces[i] += r.places[i];
+                            const g = games[r.gameCode];
+                            if (g) {
+                                String(g.rawRes).split(',').forEach(x => {
+                                    const n = parseInt(x);
+                                    if (n >= 1 && n <= 9) resultPlaces[n - 1] += 1;
+                                });
+                            }
+                        });
+
                         out.push({
                             label, rounds: list.length, bet, payout, winLoss,
                             rtp: bet > 0 ? payout / bet * 100 : 0,
                             avgBet: bet / list.length,
                             avgGrids: grids / list.length,
                             exRate: exRounds / list.length * 100,
+                            betPlaces, resultPlaces,
+                            betTotal: betPlaces.reduce((a, b) => a + b, 0),
+                            resultTotal: resultPlaces.reduce((a, b) => a + b, 0),
                             from: list[0].billTime, to: list[list.length - 1].billTime
                         });
                     };
@@ -1169,6 +1221,18 @@
                     }
                     return out;
                 });
+
+                // 熱區格的樣式: 以「占該區間的比例」決定深淺, 而不是絕對次數 ——
+                // 否則局數多的區間整條都是深色, 看不出分布形狀。
+                const heatCell = (count, total, hue) => {
+                    const share = total > 0 ? count / total : 0;
+                    // 九格均勻是 1/9, 用 2 倍當作滿色的上限, 這樣差異看得出來又不會全部爆掉
+                    const strength = Math.min(1, share / (2 / 9));
+                    return {
+                        share,
+                        style: { backgroundColor: count === 0 ? 'rgba(30,41,59,0.5)' : `${hue}${(0.1 + strength * 0.75).toFixed(2)})` }
+                    };
+                };
 
                 const betTrendTotals = computed(() => {
                     const b = betTrendBuckets.value;
@@ -1336,6 +1400,8 @@
                                         if(!groupedRounds[roundKey]) {
                                             groupedRounds[roundKey] = {
                                                 account: account,
+                                                gameCode: gameCode,
+                                                places: Array(9).fill(0), // 該局押了哪幾格
                                                 grids: 0,
                                                 payout: 0,
                                                 winLoss: 0,
@@ -1351,6 +1417,7 @@
                                         
                                         if (betPlace >= 1 && betPlace <= 9) {
                                             groupedRounds[roundKey].grids += 1;
+                                            groupedRounds[roundKey].places[betPlace - 1] += 1;
                                         } else if (betPlace === 10) {
                                             groupedRounds[roundKey].exbetCount += 1;
                                             groupedRounds[roundKey].exbetBet += bet;
@@ -1528,6 +1595,7 @@
                             p.exbetWinLoss = p.exbetRoundPayout - p.exbetRoundBet;
                         });
 
+                        physicalGames.value = uniquePhysicalGames;
                         playersMap.value = playerAgg;
                         totalPlayerRounds.value = Object.keys(groupedRounds).length;
 
@@ -1728,76 +1796,9 @@
                     });
                 };
 
-                let betTrendChartInstance = null;
-
-                const renderBetTrendChart = () => {
-                    const el = document.getElementById('betTrendChart');
-                    if (!el) return;
-                    if (betTrendChartInstance) betTrendChartInstance.destroy();
-                    const data = betTrendBuckets.value;
-                    if (!data.length) return;
-
-                    betTrendChartInstance = new Chart(el, {
-                        data: {
-                            labels: data.map(b => b.label),
-                            datasets: [
-                                {
-                                    label: '平均單局押注額', type: 'bar', yAxisID: 'yAmount',
-                                    data: data.map(b => b.avgBet),
-                                    backgroundColor: 'rgba(99, 102, 241, 0.45)',
-                                    borderColor: '#6366f1', borderWidth: 1, order: 3
-                                },
-                                {
-                                    label: '平均押注格數', type: 'line', yAxisID: 'yGrids',
-                                    data: data.map(b => b.avgGrids),
-                                    borderColor: '#facc15', borderWidth: 2, pointRadius: 2, tension: 0.3, fill: false, order: 1
-                                },
-                                {
-                                    label: 'EXBET 使用率', type: 'line', yAxisID: 'yPct',
-                                    data: data.map(b => b.exRate),
-                                    borderColor: '#f472b6', borderWidth: 2, borderDash: [4, 3], pointRadius: 0, tension: 0.3, fill: false, order: 2
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true, maintainAspectRatio: false,
-                            interaction: { mode: 'index', intersect: false },
-                            plugins: {
-                                legend: { labels: { color: '#cbd5e1', boxWidth: 12 } },
-                                tooltip: {
-                                    callbacks: {
-                                        afterBody: (items) => {
-                                            const b = data[items[0].dataIndex];
-                                            return [
-                                                `局數 ${b.rounds}`,
-                                                `總押注 ${Math.round(b.bet).toLocaleString()}`,
-                                                `淨輸贏 ${b.winLoss >= 0 ? '+' : ''}${Math.round(b.winLoss).toLocaleString()}`,
-                                                `RTP ${b.rtp.toFixed(1)}%`
-                                            ];
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                yAmount: { position: 'left', beginAtZero: true, grid: GRID,
-                                    ticks: { color: '#94a3b8' }, title: { display: true, text: '平均押注額', color: '#6366f1', font: { size: 10 } } },
-                                yGrids: { position: 'right', min: 0, max: 9, grid: { display: false },
-                                    ticks: { color: '#facc15', stepSize: 1 }, title: { display: true, text: '格數', color: '#facc15', font: { size: 10 } } },
-                                yPct: { position: 'right', min: 0, max: 100, display: false },
-                                x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 60, minRotation: 0, autoSkip: false } }
-                            }
-                        }
-                    });
-                };
-
                 const openBetTrend = () => {
                     showBetTrendModal.value = true;
-                    nextTick(renderBetTrendChart);
                 };
-
-                watch([betTrendMode, betTrendSize], () => {
-                    if (showBetTrendModal.value) nextTick(renderBetTrendChart);
-                });
 
                 // 分頁是 v-if 切換的, 離開時 canvas 連同整個區塊被銷毀, 切回來是一張全新的空 canvas。
                 // 兩邊的圖都要在切回來時重畫, 否則圖表會憑空消失。
@@ -2262,12 +2263,12 @@
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
-                    nicknameOf, nicknamesOf, displayName, nicknameCount, nicknameMap, playersMap,
+                    nicknameOf, nicknamesOf, displayName, nicknameCount, nicknameMap, playersMap, physicalGames,
                     matchedAlias, placePreference, placeSummary,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
-                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS,
+                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
