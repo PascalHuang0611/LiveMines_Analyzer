@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.11</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.12</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1014,7 +1014,7 @@
                 <div class="glass rounded-2xl p-6" v-if="houseStats.ballPattern.rounds">
                     <h3 class="text-xl font-bold text-white mb-1">落球分析</h3>
                     <p class="text-sm text-gray-400 mb-5">
-                        每局開 3 顆球。重複球本來就刻意高於獨立抽樣，所以這裡對照的是<span class="text-gray-300">上線前訂好的設計值</span>。
+                        每局開 3 顆球。球型比例對照<span class="text-gray-300">上線前訂好的設計值</span>。
                     </p>
 
                     <!-- 球型分布 -->
@@ -2228,8 +2228,8 @@
                             }
                         } else pattern.distinct++;
                     });
-                    // 對照的是「上線前訂好的落球設計值」, 不是獨立均勻抽樣的理論值 ——
-                    // 重複球本來就刻意高於獨立抽樣, 拿理論值比會一直誤報。
+                    // 對照的是「上線前訂好的落球設計值」, 不是獨立均勻抽樣的理論值。
+                    // 實際賭具的重複率本來就不等於獨立抽樣, 拿理論值比會一直誤報。
                     const patternRow = (count, specPct) => {
                         const p = specPct / 100;
                         const pct = patternRounds ? count / patternRounds * 100 : 0;
