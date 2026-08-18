@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.23</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.24</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -686,6 +686,18 @@
                             <button @click="openBetTrend" class="w-full py-2 bg-white/10 hover:bg-white/20 rounded text-sm font-bold transition-colors">
                                 押注行為變化
                             </button>
+                            <div class="flex gap-1">
+                                <button @click="exportSummary"
+                                    class="flex-1 py-1.5 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors"
+                                    :title="`匯出彙總 CSV：摘要、每日明細、格位偏好、格數分布${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
+                                    匯出彙總
+                                </button>
+                                <button @click="exportRounds"
+                                    class="flex-1 py-1.5 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors"
+                                    :title="`匯出每局明細 CSV：一列一局，共 ${playerView.roundsCount.toLocaleString()} 列${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
+                                    匯出明細
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -771,7 +783,7 @@
                     </button>
                     <p class="text-[10px] text-gray-400 mb-2">點卡片可只看那一天，左側統計會跟著變。</p>
                     <div v-if="!playerDays.length" class="text-xs text-gray-500 py-4">此範圍內沒有下注紀錄。</div>
-                    <div v-else class="space-y-2 overflow-y-auto pr-1 max-h-[541px]">
+                    <div v-else class="space-y-2 overflow-y-auto pr-1 max-h-[482px]">
                         <div v-for="d in playerDays" :key="d.day" @click="selectedDay = (selectedDay === d.day ? null : d.day)"
                             class="rounded-xl p-3 border transition-colors cursor-pointer"
                             :class="selectedDay === d.day
@@ -1680,6 +1692,92 @@
 
                 watch(betTrendMode, (v) => store.set('livemines_trend_mode', v));
                 watch(betTrendSize, (v) => store.set('livemines_trend_size', v));
+
+                // ===== 匯出 =====
+                // Excel 在 Windows 上讀 UTF-8 需要 BOM, 否則中文全變亂碼。
+                const csvCell = (v) => {
+                    const t = v === null || v === undefined ? '' : String(v);
+                    const needsQuote = t.indexOf('"') >= 0 || t.indexOf(',') >= 0
+                        || t.indexOf('\n') >= 0 || t.indexOf('\r') >= 0;
+                    return needsQuote ? '"' + t.split('"').join('""') + '"' : t;
+                };
+                const csvRows = (rows) => rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+                const downloadCsv = (name, rows) => {
+                    const blob = new Blob(['﻿' + csvRows(rows)], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = name;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                };
+
+                const exportScopeLabel = () => selectedDay.value ? selectedDay.value : (rangeIsFull.value ? '全部' : rangeFrom.value + '_' + rangeTo.value);
+                const exportFileName = (kind) => {
+                    const p = selectedPlayer.value;
+                    const who = nicknameOf(p) || p.account.slice(0, 8);
+                    return `玩家_${who}_${exportScopeLabel()}_${kind}.csv`.replace(/[\/:*?"<>|]/g, '_');
+                };
+
+                // 每局明細: 最原始可用的一列一局, PO 要自己做樞紐分析就是靠這份
+                const exportRounds = () => {
+                    const p = playerView.value, base = selectedPlayer.value;
+                    if (!p || !base) return;
+                    const rows = [['局號', '下注時間', '營運日', '押注格數', '押注格位', '投注額', '派彩', '盈虧', 'EXBET投注', '有無EXBET', '當下餘額']];
+                    p.rounds.forEach(r => {
+                        const places = [];
+                        for (let i = 0; i < 9; i++) if (r.places && r.places[i] > 0) places.push(i + 1);
+                        rows.push([r.gameCode, r.wallTime, gamingDay(r.wallTime), r.grids, places.join(' '),
+                            r.bet, r.payout, r.winLoss, r.exbetBet, r.exbetCount > 0 ? 'Y' : 'N', r.balance]);
+                    });
+                    downloadCsv(exportFileName('每局明細'), rows);
+                };
+
+                // 彙總: 摘要 + 每日 + 格位 + 格數, 分段疊在同一張表, 貼進報表直接可用
+                const exportSummary = () => {
+                    const p = playerView.value, base = selectedPlayer.value;
+                    if (!p || !base) return;
+                    const pct = (a, b) => b > 0 ? (a / b * 100).toFixed(2) : '';
+                    const rows = [];
+                    rows.push(['# 摘要']);
+                    rows.push(['項目', '值']);
+                    [
+                        ['帳號', base.account], ['暱稱', nicknameOf(base) || ''],
+                        ['所有記錄過的暱稱', nicknamesOf(base).join(' / ')],
+                        ['分群', base.segment || ''], ['資料範圍', exportScopeLabel()],
+                        ['總流水', p.totalTurnover], ['總派彩', p.totalPayout], ['玩家盈虧', p.winLoss],
+                        ['RTP(%)', p.rtp.toFixed(2)], ['總參與局數', p.roundsCount],
+                        ['Hit Rate(%)', pct(p.totalHitRounds, p.roundsCount)],
+                        ['Win Rate(%)', pct(p.totalWinRounds, p.roundsCount)],
+                        ['平均單局押注格數', p.roundsCount > 0 ? (p.totalGrids / p.roundsCount).toFixed(2) : ''],
+                        ['EXBET參與率(%)', pct(p.exbetRounds, p.roundsCount)], ['EXBET局數', p.exbetRounds],
+                        ['EXBET累計押注', p.exbetBet],
+                        ['有押EXBET局RTP(%)', p.exbetRtp === null ? '' : p.exbetRtp.toFixed(2)],
+                        ['無押EXBET局RTP(%)', p.plainRtp === null ? '' : p.plainRtp.toFixed(2)],
+                        ['契合度分數', p.alignScore === null ? '樣本不足' : p.alignScore.toFixed(1)],
+                        ['契合度可評估局數', p.alignRounds]
+                    ].forEach(r => rows.push(r));
+
+                    rows.push([]);
+                    rows.push(['# 每日明細']);
+                    rows.push(['營運日', '局數', '投注額', '初始餘額', '結束餘額', '餘額變化']);
+                    Object.keys(p.daily).sort().forEach(d => {
+                        const x = p.daily[d];
+                        rows.push([d, x.rounds, x.bet, x.open, x.close, (x.close || 0) - (x.open || 0)]);
+                    });
+
+                    rows.push([]);
+                    rows.push(['# 盤面押注位置偏好']);
+                    rows.push(['格位', '押注次數', '占所有格注(%)']);
+                    const totalPlace = p.placeCounts.reduce((a, b) => a + b, 0);
+                    p.placeCounts.forEach((c, i) => rows.push([i + 1, c, pct(c, totalPlace)]));
+
+                    rows.push([]);
+                    rows.push(['# 每局押注格數分布']);
+                    rows.push(['押注格數', '局數', '占總局數(%)']);
+                    for (let g = 1; g <= 9; g++) rows.push([g, p.gridsDist[g] || 0, pct(p.gridsDist[g] || 0, p.roundsCount)]);
+
+                    downloadCsv(exportFileName('彙總'), rows);
+                };
 
                 // 點某一天的卡片時, 左側統計只算那天 —— null 代表看全部
                 const selectedDay = ref(null);
@@ -2943,6 +3041,7 @@
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
                     betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays, playerView, selectedDay,
+                    exportRounds, exportSummary,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
