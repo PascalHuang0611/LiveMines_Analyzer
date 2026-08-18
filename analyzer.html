@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.03</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.06</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -228,6 +228,39 @@
             </svg>
             <h2 class="text-2xl font-bold">資料解析中...</h2>
             <p class="text-gray-400 mt-2">已載入 {{ processedFiles }} 個檔案，處理 {{ totalRawRows.toLocaleString() }} 筆注單</p>
+        </div>
+
+        <!-- 時間範圍: 只有資料跨多日時才需要 -->
+        <div v-if="!isProcessing && availableDays.length > 1"
+            class="glass rounded-2xl px-5 py-4 mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 animate-fade-in-delayed">
+            <span class="text-sm text-gray-400 shrink-0">時間範圍</span>
+
+            <div class="flex items-center gap-2">
+                <select v-model="rangeFrom" class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm">
+                    <option v-for="d in availableDays" :key="'f'+d" :value="d" :disabled="d > rangeTo">{{ d }}</option>
+                </select>
+                <span class="text-gray-500">→</span>
+                <select v-model="rangeTo" class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm">
+                    <option v-for="d in availableDays" :key="'t'+d" :value="d" :disabled="d < rangeFrom">{{ d }}</option>
+                </select>
+            </div>
+
+            <div class="flex flex-wrap gap-1">
+                <button @click="resetRange()"
+                    class="px-2.5 py-1 rounded text-xs transition-colors border"
+                    :class="rangeIsFull ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
+                    全部 {{ availableDays.length }} 天
+                </button>
+                <button v-for="d in availableDays" :key="'q'+d" @click="rangeFrom = d; rangeTo = d"
+                    class="px-2.5 py-1 rounded text-xs transition-colors border"
+                    :class="rangeFrom === d && rangeTo === d ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
+                    {{ d.slice(5) }}
+                </button>
+            </div>
+
+            <div v-if="!rangeIsFull" class="text-xs text-amber-400 ml-auto">
+                已篩選 · 兩個分頁的數字都只計入此範圍
+            </div>
         </div>
 
         <!-- 匯出重複注單提示 -->
@@ -631,43 +664,6 @@
                             </div>
                         </div>
 
-                        <h4 class="text-sm font-bold text-gray-300 mt-6 mb-3 border-b border-white/10 pb-2">盤面押注位置偏好
-                            <span class="font-normal text-gray-500 text-xs ml-1">（押哪幾格，均勻為 11.1%）</span>
-                        </h4>
-                        <div class="flex flex-col sm:flex-row items-center gap-5">
-                            <div class="grid grid-cols-3 gap-1.5 w-44 shrink-0">
-                                <div v-for="c in placePreference(selectedPlayer.placeCounts)" :key="c.place"
-                                    class="rounded-lg text-center py-2.5 cursor-help border border-white/5"
-                                    :style="{ backgroundColor: c.bg }"
-                                    :title="`第 ${c.place} 格\n分子 (押注次數): ${c.count.toLocaleString()}\n分母 (該玩家格注總數): ${c.total.toLocaleString()}\n比例: ${c.pct.toFixed(2)}%\n與均勻值差: ${c.dev >= 0 ? '+' : ''}${c.dev.toFixed(2)}pp`">
-                                    <div class="text-[10px] text-gray-400 leading-none">{{ c.place }}</div>
-                                    <div class="text-sm font-bold text-white leading-tight mt-0.5">{{ c.pct.toFixed(1) }}%</div>
-                                </div>
-                            </div>
-                            <div class="text-xs text-gray-400 leading-relaxed">
-                                <template v-if="placeSummary(selectedPlayer.placeCounts)">
-                                    <div v-if="placeSummary(selectedPlayer.placeCounts).tooManyTies" class="text-gray-400">
-                                        有 {{ placeSummary(selectedPlayer.placeCounts).topPlaces.length }} 個格位並列最高（各
-                                        {{ placeSummary(selectedPlayer.placeCounts).topPct.toFixed(1) }}%），沒有明顯偏好。
-                                    </div>
-                                    <div v-else>
-                                        最常押
-                                        <span class="font-bold text-indigo-300">第
-                                            {{ placeSummary(selectedPlayer.placeCounts).topPlaces.join('、') }} 格</span>
-                                        （{{ placeSummary(selectedPlayer.placeCounts).topPlaces.length > 1 ? '各 ' : ''
-                                        }}{{ placeSummary(selectedPlayer.placeCounts).topPct.toFixed(1) }}%）。
-                                    </div>
-                                    <div class="mt-2 text-gray-500">
-                                        共 {{ placeSummary(selectedPlayer.placeCounts).total.toLocaleString() }} 次格注，
-                                        押過 {{ placeSummary(selectedPlayer.placeCounts).used }} / 9 個格位。
-                                        <template v-if="placeSummary(selectedPlayer.placeCounts).used === 9 && placeSummary(selectedPlayer.placeCounts).spread < 3">
-                                            分布接近均勻，看不出特定偏好。
-                                        </template>
-                                    </div>
-                                </template>
-                                <span v-else class="text-gray-500">沒有格注紀錄。</span>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -715,16 +711,16 @@
                 <div class="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-6 pt-2">
                     <!-- 押注 vs 開獎 的格位分布對照; 區間多的時候整塊橫向捲動 -->
                     <div class="flex-1 min-w-0 min-h-0 overflow-auto">
-                        <div :style="{ minWidth: Math.max(560, betTrendBuckets.length * 34 + 60) + 'px' }">
+                        <div :style="{ minWidth: Math.max(560, betTrendBuckets.length * 36 + 60) + 'px' }">
 
                             <div class="text-xs font-bold text-indigo-300 mb-1 sticky left-0">玩家押注的格位分布</div>
-                            <div class="text-[10px] text-gray-500 mb-2 sticky left-0">每欄是一個區間，顏色深淺代表該格占該區間押注的比例</div>
+                            <div class="text-[10px] text-gray-500 mb-2 sticky left-0">每欄是一個區間，數字為該格占該區間的百分比（顏色同步反映深淺，0 不顯示數字）</div>
                             <div v-for="row in 9" :key="'b'+row" class="flex items-center gap-px mb-px">
                                 <div class="w-6 shrink-0 text-[10px] text-gray-500 text-right pr-1 sticky left-0 bg-slate-900/80">{{ row }}</div>
                                 <div v-for="(b, i) in betTrendBuckets" :key="i"
-                                    class="h-5 flex-1 min-w-[10px] rounded-sm cursor-help"
+                                    class="h-6 flex-1 min-w-[32px] rounded-sm cursor-help flex items-center justify-center text-[9px] font-bold text-white/90"
                                     :style="heatCell(b.betPlaces[row-1], b.betTotal, 'rgba(99,102,241,').style"
-                                    :title="`${b.label}\n第 ${row} 格\n押注 ${b.betPlaces[row-1]} 次 / 該區間 ${b.betTotal} 次\n占比 ${(b.betTotal ? b.betPlaces[row-1]/b.betTotal*100 : 0).toFixed(1)}%`"></div>
+                                    :title="`${b.label}\n第 ${row} 格\n押注 ${b.betPlaces[row-1]} 次 / 該區間 ${b.betTotal} 次\n占比 ${(b.betTotal ? b.betPlaces[row-1]/b.betTotal*100 : 0).toFixed(1)}%`">{{ b.betPlaces[row-1] ? Math.round(b.betPlaces[row-1] / b.betTotal * 100) : '' }}</div>
                             </div>
 
                             <div class="text-xs font-bold text-emerald-300 mt-5 mb-1 sticky left-0">同期間大盤開出的球</div>
@@ -732,9 +728,9 @@
                             <div v-for="row in 9" :key="'r'+row" class="flex items-center gap-px mb-px">
                                 <div class="w-6 shrink-0 text-[10px] text-gray-500 text-right pr-1 sticky left-0 bg-slate-900/80">{{ row }}</div>
                                 <div v-for="(b, i) in betTrendBuckets" :key="i"
-                                    class="h-5 flex-1 min-w-[10px] rounded-sm cursor-help"
+                                    class="h-6 flex-1 min-w-[32px] rounded-sm cursor-help flex items-center justify-center text-[9px] font-bold text-white/90"
                                     :style="heatCell(b.resultPlaces[row-1], b.resultTotal, 'rgba(52,211,153,').style"
-                                    :title="`${b.label}\n第 ${row} 格\n開出 ${b.resultPlaces[row-1]} 次 / 該區間 ${b.resultTotal} 顆球\n占比 ${(b.resultTotal ? b.resultPlaces[row-1]/b.resultTotal*100 : 0).toFixed(1)}%`"></div>
+                                    :title="`${b.label}\n第 ${row} 格\n開出 ${b.resultPlaces[row-1]} 次 / 該區間 ${b.resultTotal} 顆球\n占比 ${(b.resultTotal ? b.resultPlaces[row-1]/b.resultTotal*100 : 0).toFixed(1)}%`">{{ b.resultPlaces[row-1] ? Math.round(b.resultPlaces[row-1] / b.resultTotal * 100) : '' }}</div>
                             </div>
 
                             <div class="flex items-center gap-px mt-2">
@@ -1088,6 +1084,48 @@
 
                 const playersMap = ref({});
                 const physicalGames = ref({}); // gameCode -> { rawRes, rawLight }, 給押注/開獎對照用
+                const allRounds = ref([]);     // 全部玩家單局, 篩選時間範圍後重新聚合就靠它
+
+                // ===== 時間範圍篩選 =====
+                // 一律用「牆上時間字串」比較 (YYYY-MM-DD)。注單的 Bill Time 沒有時區、
+                // 大盤的 Start Time 帶 +08:00, 若轉成 Date 比較會跟著看報表的人所在時區偏移。
+                const rangeFrom = ref('');  // YYYY-MM-DD, 含當日
+                const rangeTo = ref('');    // YYYY-MM-DD, 含當日
+
+                const availableDays = computed(() => {
+                    const days = new Set();
+                    allRounds.value.forEach(r => { if (r.wallTime) days.add(r.wallTime.slice(0, 10)); });
+                    (gameResultsData.value || []).forEach(g => {
+                        const w = wallClock(g['Start Time']);
+                        if (w) days.add(w.slice(0, 10));
+                    });
+                    return [...days].sort();
+                });
+
+                const resetRange = () => {
+                    const d = availableDays.value;
+                    rangeFrom.value = d.length ? d[0] : '';
+                    rangeTo.value = d.length ? d[d.length - 1] : '';
+                };
+
+                const rangeIsFull = computed(() => {
+                    const d = availableDays.value;
+                    return !d.length || (rangeFrom.value === d[0] && rangeTo.value === d[d.length - 1]);
+                });
+
+                // 落在範圍內嗎。傳入的是 "YYYY-MM-DD HH:MM:SS" 這種字串, 直接比前 10 碼
+                const inRange = (wall) => {
+                    if (!wall) return false;
+                    const day = wall.slice(0, 10);
+                    if (rangeFrom.value && day < rangeFrom.value) return false;
+                    if (rangeTo.value && day > rangeTo.value) return false;
+                    return true;
+                };
+
+                const activeRounds = computed(() => {
+                    if (rangeIsFull.value) return allRounds.value;
+                    return allRounds.value.filter(r => inRange(r.wallTime));
+                });
                 const DEFAULT_HIGH_THRESHOLD = 200;
                 const DEFAULT_MID_THRESHOLD = 50;
 
@@ -1139,8 +1177,13 @@
 
                 // ===== 押注變化圖: 把玩家的局依「每 N 局」或「每 N 分鐘」分桶 =====
                 const showBetTrendModal = ref(false);
-                const betTrendMode = ref('rounds'); // 'rounds' | 'time'
-                const betTrendSize = ref(5);
+                // 顆粒度記住上次的選擇 —— 每次開圖都要重設很煩
+                const savedTrendMode = store.get('livemines_trend_mode');
+                const savedTrendSize = parseInt(store.get('livemines_trend_size'));
+                const betTrendMode = ref(savedTrendMode === 'time' ? 'time' : 'rounds');
+                const betTrendSize = ref(Number.isFinite(savedTrendSize) && savedTrendSize > 0
+                    ? savedTrendSize
+                    : (savedTrendMode === 'time' ? 30 : 5));
 
                 const BET_TREND_OPTIONS = {
                     rounds: [{ v: 5, t: '每 5 局' }, { v: 10, t: '每 10 局' }, { v: 25, t: '每 25 局' }, { v: 50, t: '每 50 局' }],
@@ -1234,6 +1277,9 @@
                     };
                 };
 
+                watch(betTrendMode, (v) => store.set('livemines_trend_mode', v));
+                watch(betTrendSize, (v) => store.set('livemines_trend_size', v));
+
                 const betTrendTotals = computed(() => {
                     const b = betTrendBuckets.value;
                     if (!b.length) return null;
@@ -1313,6 +1359,102 @@
                     }
                     return map;
                 };
+
+                // 依目前的時間範圍, 從玩家單局重新聚合出所有玩家層級的統計。
+                // 匯入時算一次, 之後每次改範圍再算一次 —— 所以聚合邏輯只能有這一份。
+                const rebuildFromRounds = () => {
+                    const rounds = activeRounds.value;
+                    const playerAgg = {};
+                    const dist = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0 };
+                    const seenGames = new Set();
+                    const balls = Array(9).fill(0);
+                    const lights = Array(9).fill(0);
+
+                    rounds.forEach(r => {
+                        let p = playerAgg[r.account];
+                        if (!p) {
+                            p = playerAgg[r.account] = {
+                                account: r.account,
+                                agent: r.agent || '',
+                                placeCounts: Array(9).fill(0),
+                                totalTurnover: 0, totalPayout: 0, winLoss: 0, totalGrids: 0,
+                                roundsCount: 0, totalHitRounds: 0, totalWinRounds: 0,
+                                exbetRounds: 0, exbetBet: 0, exbetRoundBet: 0, exbetRoundPayout: 0,
+                                plainRounds: 0, plainRoundBet: 0, plainRoundPayout: 0,
+                                rounds: [], gridsDist: {}
+                            };
+                        }
+                        p.totalTurnover += r.bet;
+                        p.totalPayout += r.payout;
+                        p.winLoss += r.winLoss;
+                        p.totalGrids += r.grids;   // r.grids 只含 1~9 的格注, EXBET 不算一格
+                        p.roundsCount += 1;
+                        if (r.payout > 0) p.totalHitRounds++;
+                        if (r.winLoss > 0) p.totalWinRounds++;
+                        if (r.places) for (let i = 0; i < 9; i++) p.placeCounts[i] += r.places[i];
+
+                        if (r.exbetCount > 0) {
+                            p.exbetRounds++;
+                            p.exbetBet += r.exbetBet;
+                            p.exbetRoundBet += r.bet;
+                            p.exbetRoundPayout += r.payout;
+                        } else {
+                            p.plainRounds++;
+                            p.plainRoundBet += r.bet;
+                            p.plainRoundPayout += r.payout;
+                        }
+                        p.rounds.push(r);
+
+                        const g = Math.min(9, r.grids);
+                        if (g >= 1) {
+                            dist[g]++;
+                            p.gridsDist[g] = (p.gridsDist[g] || 0) + 1;
+                        }
+
+                        // 冷熱區看的是「物理賽果」, 同一局多位玩家只能算一次
+                        if (!seenGames.has(r.gameCode)) {
+                            seenGames.add(r.gameCode);
+                            const u = physicalGames.value[r.gameCode];
+                            if (u) {
+                                String(u.rawRes).split(',').forEach(x => {
+                                    const n = parseInt(x); if (n >= 1 && n <= 9) balls[n - 1]++;
+                                });
+                                String(u.rawLight).split(',').forEach(x => {
+                                    const n = parseInt(x); if (n >= 1 && n <= 9) lights[n - 1]++;
+                                });
+                            }
+                        }
+                    });
+
+                    Object.values(playerAgg).forEach(p => {
+                        p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
+                        p.rounds.sort((a, b) => a.billTime - b.billTime);
+                        p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
+                        p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
+                        p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
+                        p.exbetWinLoss = p.exbetRoundPayout - p.exbetRoundBet;
+                    });
+
+                    gridsBetDist.value = dist;
+                    ballCounts.value = balls;
+                    lightningCounts.value = lights;
+                    playersMap.value = playerAgg;
+                    totalPlayerRounds.value = rounds.length;
+
+                    // 換範圍後原本選的玩家可能已經沒有資料了
+                    if (selectedPlayer.value) {
+                        selectedPlayer.value = playerAgg[selectedPlayer.value.account] || null;
+                    }
+
+                    computeClusters();
+                    nextTick(() => {
+                        if (activeTab.value === 'player') renderChart();
+                    });
+                };
+
+                watch([rangeFrom, rangeTo], () => {
+                    if (hasData.value) rebuildFromRounds();
+                });
 
                 const handleFileSelect = async (event) => {
                     const picked = Array.from(event.target.files);
@@ -1400,7 +1542,9 @@
                                         if(!groupedRounds[roundKey]) {
                                             groupedRounds[roundKey] = {
                                                 account: account,
+                                                agent: row['Agent'] || '', // 與 Account 合併後才是暱稱對照表的 key
                                                 gameCode: gameCode,
+                                                wallTime: '',              // "YYYY-MM-DD HH:MM:SS", 供時間範圍篩選
                                                 places: Array(9).fill(0), // 該局押了哪幾格
                                                 grids: 0,
                                                 payout: 0,
@@ -1434,6 +1578,7 @@
                                         groupedRounds[roundKey].balance = balance;
                                         if(!groupedRounds[roundKey].billTime && row['Bill Time']) {
                                             groupedRounds[roundKey].billTime = new Date(row['Bill Time']).getTime();
+                                            groupedRounds[roundKey].wallTime = wallClock(row['Bill Time']) || '';
                                         }
                                         
                                         // 2. Unique Physical Games (for hot/cold)
@@ -1444,40 +1589,6 @@
                                             };
                                         }
 
-                                        // 3. Player Aggregation
-                                        if(!playerAgg[account]) {
-                                            playerAgg[account] = {
-                                                account: account,
-                                                agent: row['Agent'] || '', // 與 Account 合併後才是暱稱對照表的 key
-                                                placeCounts: Array(9).fill(0), // 各格被押的次數 (index 0 = 第1格)
-                                                totalTurnover: 0,
-                                                totalPayout: 0,
-                                                winLoss: 0,
-                                                totalGrids: 0,
-                                                roundsSet: new Set(),
-                                                exbetRounds: 0,
-                                                exbetBet: 0,
-                                                // 局級口徑: EXBET 那一列的 Payout 恆為 0,
-                                                // 其回報是灌在同局格注列的倍數裡, 因此只能用整局的
-                                                // 投注/派彩來衡量 EXBET 的實際價值。
-                                                exbetRoundBet: 0,
-                                                exbetRoundPayout: 0,
-                                                plainRounds: 0,
-                                                plainRoundBet: 0,
-                                                plainRoundPayout: 0
-                                            };
-                                        }
-                                        playerAgg[account].totalTurnover += bet;
-                                        playerAgg[account].totalPayout += payout;
-                                        playerAgg[account].winLoss += wl;
-                                        // 只計 1~9 的盤面格注; Bet Place=10 是 EXBET, 不是一格
-                                        if (!(betPlace === 10)) {
-                                            playerAgg[account].totalGrids += 1;
-                                        }
-                                        if (betPlace >= 1 && betPlace <= 9) {
-                                            playerAgg[account].placeCounts[betPlace - 1] += 1;
-                                        }
-                                        playerAgg[account].roundsSet.add(gameCode);
                                     });
                                     }
                                     resolve();
@@ -1517,93 +1628,11 @@
                     }
 
                     if (parsedBills) {
-                        // Compute Grids Bet Distribution
-                        const tempDist = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0};
-                        Object.values(groupedRounds).forEach(r => {
-                            if (r.grids >= 1 && r.grids <= 9) {
-                                tempDist[r.grids]++;
-                            } else if (r.grids > 9) {
-                                // Fallback if older CSVs have grids > 9
-                                tempDist[9]++;
-                            }
-                        });
-                        gridsBetDist.value = tempDist;
-
-                        // Compute Physical Hot Zones
-                        const tempBalls = Array(9).fill(0);
-                        const tempLightnings = Array(9).fill(0);
-                        
-                        Object.values(uniquePhysicalGames).forEach(u => {
-                            const b = String(u.rawRes).split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
-                            const l = String(u.rawLight).split(',').map(n => parseInt(n)).filter(n => !isNaN(n));
-                            b.forEach(n => {
-                                if(n >= 1 && n <= 9) tempBalls[n-1]++;
-                            });
-                            l.forEach(n => {
-                                if(n >= 1 && n <= 9) tempLightnings[n-1]++;
-                            });
-                        });
-                        ballCounts.value = tempBalls;
-                        lightningCounts.value = tempLightnings;
-
-                        // Setup Players
-                        Object.values(playerAgg).forEach(p => {
-                            p.roundsCount = p.roundsSet.size;
-                            p.totalHitRounds = 0;
-                            p.totalWinRounds = 0;
-                            p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
-                            p.rounds = [];
-                            p.gridsDist = {};
-                            delete p.roundsSet;
-                        });
-
-                        Object.values(groupedRounds).forEach(r => {
-                            const account = r.account;
-                            if (!playerAgg[account]) return;
-                            if (r.payout > 0) playerAgg[account].totalHitRounds++;
-                            if (r.winLoss > 0) playerAgg[account].totalWinRounds++;
-                            
-                            if (r.exbetCount > 0) {
-                                playerAgg[account].exbetRounds++;
-                                playerAgg[account].exbetBet += r.exbetBet;
-                                playerAgg[account].exbetRoundBet += r.bet;
-                                playerAgg[account].exbetRoundPayout += r.payout;
-                            } else {
-                                playerAgg[account].plainRounds++;
-                                playerAgg[account].plainRoundBet += r.bet;
-                                playerAgg[account].plainRoundPayout += r.payout;
-                            }
-
-                            playerAgg[account].rounds.push(r);
-                            
-                            if (r.grids >= 1 && r.grids <= 9) {
-                                playerAgg[account].gridsDist[r.grids] = (playerAgg[account].gridsDist[r.grids] || 0) + 1;
-                            } else if (r.grids > 9) {
-                                // Fallback for older CSVs
-                                playerAgg[account].gridsDist[9] = (playerAgg[account].gridsDist[9] || 0) + 1;
-                            }
-                        });
-                        
-                        Object.values(playerAgg).forEach(p => {
-                            p.rounds.sort((a, b) => a.billTime - b.billTime);
-
-                            // EXBET 效益: 有押 EXBET 的局 vs 沒押 EXBET 的局, 兩者的整局 RTP
-                            // (分母含 EXBET 押注, 分子是該局全部派彩)
-                            p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
-                            p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
-                            p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
-                            p.exbetWinLoss = p.exbetRoundPayout - p.exbetRoundBet;
-                        });
-
+                        allRounds.value = Object.values(groupedRounds);
                         physicalGames.value = uniquePhysicalGames;
-                        playersMap.value = playerAgg;
-                        totalPlayerRounds.value = Object.keys(groupedRounds).length;
-
                         hasData.value = true;
-                        computeClusters();
-                        nextTick(() => {
-                            renderChart();
-                        });
+                        resetRange();      // 依資料實際涵蓋的日期設定預設範圍
+                        rebuildFromRounds();
                     }
 
                     isProcessing.value = false;
@@ -1894,8 +1923,9 @@
                     if (!raw.length) return null;
                     const n = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
 
-                    // 未結算的局金額全為 0, 混進來只會稀釋每局平均
-                    const approved = raw.filter(r => r['Game Status'] === 'Approved');
+                    // 未結算的局金額全為 0, 混進來只會稀釋每局平均。同時套用時間範圍。
+                    const approved = raw.filter(r => r['Game Status'] === 'Approved'
+                        && (rangeIsFull.value || inRange(wallClock(r['Start Time']))));
                     // 再排掉「開了但沒人下注」的空局 —— 它們不是營運結果, 只會拉低每局均值
                     const active = approved.filter(r => n(r['Bet Amount']) > 0);
                     if (!active.length) return null;
@@ -2023,20 +2053,6 @@
                             : `rgba(148, 163, 184, ${0.06 + strength * 0.22})`; // 冷落: 灰
                         return { place: i + 1, count: n, total, pct, dev, bg };
                     });
-                };
-
-                // 給文字敘述用。只講「最常押」—— 玩家常常只押過 2~3 個格位, 其餘全是 0,
-                // 這時挑一個當「最少押」是沒有意義的(有六個並列 0%)。並列最高的一起列出。
-                const placeSummary = (counts) => {
-                    const cells = placePreference(counts);
-                    const total = cells[0] ? cells[0].total : 0;
-                    if (!total) return null;
-                    const maxPct = Math.max(...cells.map(c => c.pct));
-                    const topPlaces = cells.filter(c => c.pct === maxPct).map(c => c.place);
-                    const used = cells.filter(c => c.count > 0).length;
-                    const spread = maxPct - Math.min(...cells.filter(c => c.count > 0).map(c => c.pct));
-                    // 並列太多格時列出來只是一長串數字, 不如直接說沒有偏好
-                    return { topPlaces, topPct: maxPct, used, total, spread, tooManyTies: topPlaces.length > 3 };
                 };
 
                 const nicknameCount = computed(() => {
@@ -2258,13 +2274,14 @@
                     activeTab, hasGameData, gameResultsData,
                     houseStats, fmtInt, fmtHours,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
+                    rangeFrom, rangeTo, availableDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
                     nicknameOf, nicknamesOf, displayName, nicknameCount, nicknameMap, playersMap, physicalGames,
-                    matchedAlias, placePreference, placeSummary,
+                    matchedAlias, placePreference,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
