@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.26</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.28</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1746,115 +1746,6 @@
                     downloadCsv(exportFileName('每局明細'), rows);
                 };
 
-                // 在畫面外算一張圖再輸出 PNG。不直接抓畫面上的 canvas, 因為歷程圖只有開啟圖表視窗時才存在,
-                // 而且畫面上的圖會被「顯示區間」裁掉 —— 匯出應該是完整的。
-                const AXIS_C = '#94a3b8';
-                const GRID_C = 'rgba(255,255,255,0.1)';
-                const chartToPng = (config, w, h, filename) => new Promise((resolve) => {
-                    const holder = document.createElement('div');
-                    holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + w + 'px;height:' + h + 'px;';
-                    const cv = document.createElement('canvas');
-                    cv.width = w; cv.height = h;
-                    holder.appendChild(cv);
-                    document.body.appendChild(holder);
-
-                    config.options = config.options || {};
-                    config.options.responsive = false;
-                    config.options.maintainAspectRatio = false;
-                    config.options.animation = false;   // 必須關掉, 否則會截到動畫中途
-
-                    const chart = new Chart(cv, config);
-                    // 用 setTimeout 而不是 requestAnimationFrame —— 分頁在背景時 rAF 不會觸發,
-                    // 使用者按下匯出後切走就再也拿不到圖。關掉動畫後 Chart.js 已經畫完了, 這裡只是讓出一輪。
-                    setTimeout(() => {
-                        const out = document.createElement('canvas');
-                        out.width = w; out.height = h;
-                        const ctx = out.getContext('2d');
-                        ctx.fillStyle = '#0f172a';           // 補底色, 否則存出來背景是透明的
-                        ctx.fillRect(0, 0, w, h);
-                        ctx.drawImage(cv, 0, 0);
-                        out.toBlob((blob) => {
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url; a.download = filename;
-                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                            setTimeout(() => URL.revokeObjectURL(url), 1000);
-                            chart.destroy();
-                            document.body.removeChild(holder);
-                            resolve();
-                        }, 'image/png');
-                    }, 30);
-                });
-
-                const pngName = (kind) => exportFileName(kind).replace(/\.csv$/, '.png');
-                const whoLabel = () => nicknameOf(selectedPlayer.value) || selectedPlayer.value.account;
-
-                const exportHistoryPng = () => {
-                    const p = playerView.value;
-                    if (!p || !p.rounds.length) return Promise.resolve();
-                    const d = buildHistoryData(p.rounds);
-                    return chartToPng({
-                        type: 'line',
-                        data: {
-                            labels: d.labels,
-                            datasets: [
-                                { label: '累積 RTP (%)', data: d.rtpData, type: 'line', yAxisID: 'yRTP',
-                                  borderColor: '#38bdf8', borderWidth: 2, pointRadius: 0, tension: 0.4,
-                                  fill: true, backgroundColor: 'rgba(56,189,248,0.15)', order: 1 },
-                                { label: '單局押注金額', data: d.betData, type: 'bar', yAxisID: 'yBet', grouped: false,
-                                  backgroundColor: 'rgba(99,102,241,0.4)', borderColor: '#6366f1', borderWidth: 1, order: 2 },
-                                { label: '單局贏分', data: d.winData, type: 'bar', yAxisID: 'yBet', grouped: false,
-                                  backgroundColor: 'rgba(234,179,8,0.4)', borderColor: '#eab308', borderWidth: 1, order: 3 },
-                                { label: '玩家餘額', data: d.balanceData, type: 'line', yAxisID: 'yBalance',
-                                  borderColor: '#34d399', borderWidth: 2, pointRadius: 0, tension: 0.1,
-                                  fill: false, spanGaps: false, order: 0 }
-                            ]
-                        },
-                        options: {
-                            plugins: {
-                                legend: { labels: { color: '#cbd5e1', boxWidth: 12 } },
-                                title: { display: true, color: '#e2e8f0',
-                                         text: whoLabel() + ' 歷程圖表 · ' + exportScopeLabel() + ' · ' + p.rounds.length + ' 局' }
-                            },
-                            scales: {
-                                yRTP: { type: 'linear', position: 'left', title: { display: true, text: 'RTP (%)', color: '#38bdf8' },
-                                        ticks: { color: '#38bdf8' }, grid: { color: 'rgba(56,189,248,0.1)' } },
-                                yBalance: { type: 'linear', position: 'right', title: { display: true, text: 'Balance', color: '#34d399' },
-                                            ticks: { color: '#34d399' }, grid: { display: false } },
-                                yBet: { type: 'linear', position: 'right', grid: { display: false }, display: false },
-                                x: { ticks: { color: AXIS_C, maxTicksLimit: 14 }, grid: { display: false } }
-                            }
-                        }
-                    }, 1400, 600, pngName('歷程圖'));
-                };
-
-                const exportGridsPng = () => {
-                    const p = playerView.value;
-                    if (!p || !p.roundsCount) return Promise.resolve();
-                    const data = [];
-                    for (let g = 1; g <= 9; g++) data.push((p.gridsDist[g] || 0) / p.roundsCount * 100);
-                    return chartToPng({
-                        type: 'bar',
-                        data: {
-                            labels: Array.from({ length: 9 }, (_, i) => (i + 1) + ' 格'),
-                            datasets: [{ label: '局數佔比', data: data,
-                                backgroundColor: 'rgba(99,102,241,0.6)', borderColor: '#6366f1', borderWidth: 1, borderRadius: 4 }]
-                        },
-                        options: {
-                            plugins: {
-                                legend: { display: false },
-                                title: { display: true, color: '#e2e8f0',
-                                         text: whoLabel() + ' 押注格數分佈 · ' + exportScopeLabel() + ' · ' + p.roundsCount.toLocaleString() + ' 局' }
-                            },
-                            scales: {
-                                y: { beginAtZero: true, grid: { color: GRID_C },
-                                     ticks: { color: AXIS_C, callback: (v) => v + '%' } },
-                                x: { grid: { display: false }, ticks: { color: AXIS_C } }
-                            }
-                        }
-                    }, 900, 500, pngName('格數分布'));
-                };
-
                 // 彙總: 摘要 + 每日 + 格位 + 格數, 分段疊在同一張表, 貼進報表直接可用
                 const exportSummary = () => {
                     const p = playerView.value, base = selectedPlayer.value;
@@ -1900,9 +1791,6 @@
                     for (let g = 1; g <= 9; g++) rows.push([g, p.gridsDist[g] || 0, pct(p.gridsDist[g] || 0, p.roundsCount)]);
 
                     downloadCsv(exportFileName('彙總'), rows);
-                    // 兩張圖跟著彙總一起出。錯開時間, 免得瀏覽器把連續下載當成濫用而擋掉。
-                    setTimeout(exportHistoryPng, 300);
-                    setTimeout(exportGridsPng, 900);
                 };
 
                 // 點某一天的卡片時, 左側統計只算那天 —— null 代表看全部
