@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.17</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.18</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -514,35 +514,35 @@
                 </p>
                 <div class="overflow-x-auto overflow-y-auto max-h-[500px]" @scroll="handleTableScroll">
                     <table class="w-full text-center text-sm border-collapse">
-                        <thead class="sticky top-0 z-10 bg-slate-900 shadow-md">
+                        <thead class="sticky top-0 z-10 bg-[#212c42] shadow-md">
                             <tr class="text-indigo-200">
-                                <th class="p-3 text-left sticky left-0 bg-slate-900 z-20">玩家帳號</th>
-                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('totalTurnover')">
+                                <th class="p-3 text-left sticky left-0 bg-[#212c42] z-20 whitespace-nowrap border-r border-white/10">玩家帳號</th>
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors whitespace-nowrap" @click="sortBy('totalTurnover')">
                                     總流水 (Turnover) ↕
                                 </th>
-                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('totalPayout')">
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors whitespace-nowrap" @click="sortBy('totalPayout')">
                                     總派彩 (Payout) ↕
                                 </th>
-                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('winLoss')">
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors whitespace-nowrap" @click="sortBy('winLoss')">
                                     玩家盈虧 (Win/Loss) ↕
                                 </th>
-                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('rtp')">
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors whitespace-nowrap" @click="sortBy('rtp')">
                                     RTP ↕
                                 </th>
-                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('roundsCount')">
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors whitespace-nowrap" @click="sortBy('roundsCount')">
                                     遊玩局數 ↕
                                 </th>
-                                <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('alignScore')"
+                                <th class="p-3 cursor-pointer hover:text-white transition-colors whitespace-nowrap" @click="sortBy('alignScore')"
                                     title="下注格位與開獎的契合度。0 = 與隨機挑格無異，100 = 押 3 格且 3 顆全中的水準。&#10;全押 9 格的局不列入評估。可評估局數未達門檻者顯示「—」，排序時一律墊底。">
                                     契合度 ↕
                                 </th>
                                 <template v-for="(d, di) in rangeDays" :key="'h'+d">
-                                    <th class="p-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400"
+                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]"
                                         :class="di === 0 ? 'border-l-2 border-white/15' : 'border-l border-white/5'">
                                         <span class="text-indigo-200 font-bold">{{ d.slice(5) }}</span> 投注
                                     </th>
-                                    <th class="p-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400">初始餘額</th>
-                                    <th class="p-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400">結束餘額</th>
+                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]">初始餘額</th>
+                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]">結束餘額</th>
                                 </template>
                             </tr>
                         </thead>
@@ -552,8 +552,8 @@
                                     找不到{{ nicknameCount ? '暱稱或帳號' : '帳號' }}包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
                                 </td>
                             </tr>
-                            <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-                                <td class="p-3 text-left sticky left-0 bg-slate-900 z-10">
+                            <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="group border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
+                                <td class="p-3 text-left sticky left-0 bg-[#1e2739] group-hover:bg-[#273043] z-10 border-r border-white/10 transition-colors">
                                     <div class="font-bold flex items-center gap-1.5" :class="nicknameOf(player) ? 'text-indigo-300' : 'text-gray-400 font-mono text-xs'">
                                         <span>
                                             <span v-for="(part, i) in highlightParts(displayName(player))" :key="i"
@@ -592,16 +592,16 @@
                                     </span>
                                 </td>
                                 <template v-for="(d, di) in rangeDays" :key="'d'+d">
-                                    <td class="p-3 text-right whitespace-nowrap"
+                                    <td class="px-4 py-3 text-right whitespace-nowrap"
                                         :class="di === 0 ? 'border-l-2 border-white/15' : 'border-l border-white/5'">
                                         <span v-if="player.daily[d]" class="text-gray-300">{{ formatMoney(player.daily[d].bet) }}</span>
                                         <span v-else class="text-gray-700">—</span>
                                     </td>
-                                    <td class="p-3 text-right whitespace-nowrap text-gray-400">
+                                    <td class="px-4 py-3 text-right whitespace-nowrap text-gray-400">
                                         <span v-if="player.daily[d] && player.daily[d].open !== null">{{ formatMoney(player.daily[d].open) }}</span>
                                         <span v-else class="text-gray-700">—</span>
                                     </td>
-                                    <td class="p-3 text-right whitespace-nowrap">
+                                    <td class="px-4 py-3 text-right whitespace-nowrap">
                                         <template v-if="player.daily[d] && player.daily[d].close !== null">
                                             <span :class="player.daily[d].close >= player.daily[d].open ? 'text-green-400' : 'text-red-400'">
                                                 {{ formatMoney(player.daily[d].close) }}
