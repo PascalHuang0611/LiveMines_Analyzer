@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.06</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.08</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -699,12 +699,27 @@
                             {{ o.t }}
                         </button>
                     </div>
-                    <div v-if="betTrendTotals" class="text-xs text-gray-500 ml-auto">
-                        {{ betTrendTotals.buckets }} 個區間 ·
-                        <span :class="betTrendTotals.winLoss >= 0 ? 'text-green-400' : 'text-red-400'">
-                            總計 {{ betTrendTotals.winLoss >= 0 ? '+' : '' }}{{ fmtInt(betTrendTotals.winLoss) }}
-                        </span>
-                        · 賺 {{ betTrendTotals.up }} / 賠 {{ betTrendTotals.down }} 個區間
+                    <div v-if="betTrendTotals" class="text-xs text-gray-500 ml-auto text-right">
+                        <div>
+                            {{ betTrendTotals.buckets }} 個區間 ·
+                            <span :class="betTrendTotals.winLoss >= 0 ? 'text-green-400' : 'text-red-400'">
+                                總計 {{ betTrendTotals.winLoss >= 0 ? '+' : '' }}{{ fmtInt(betTrendTotals.winLoss) }}
+                            </span>
+                            · 賺 {{ betTrendTotals.up }} / 賠 {{ betTrendTotals.down }} 個區間
+                        </div>
+                        <div v-if="playerAlignment" class="mt-0.5"
+                            :title="`實際命中 ${playerAlignment.hit} 顆 / 期望 ${playerAlignment.exp.toFixed(1)} 顆\n可評估 ${playerAlignment.evaluable} 局，全押 ${playerAlignment.full} 局不計入 z`">
+                            契合度分數
+                            <span class="font-bold" :class="playerAlignment.score > 0 ? 'text-amber-300' : 'text-slate-300'">{{ playerAlignment.score.toFixed(1) }}</span>
+                            <span class="text-gray-600">· {{ playerAlignment.evaluable }} 局可評估</span>
+                            <template v-if="!playerAlignment.reliable">
+                                <span class="text-amber-500/80">· 樣本不足，僅供參考</span>
+                            </template>
+                            <template v-else-if="playerAlignment.z !== null">
+                                · z = <span class="font-bold" :class="Math.abs(playerAlignment.z) >= 3 ? 'text-amber-300' : 'text-gray-400'">{{ playerAlignment.z.toFixed(2) }}</span>
+                                <span class="text-gray-600">（{{ Math.abs(playerAlignment.z) < 2 ? '與隨機無異' : (Math.abs(playerAlignment.z) < 3 ? '略有偏離' : '偏離明顯') }}）</span>
+                            </template>
+                        </div>
                     </div>
                 </div>
 
@@ -733,6 +748,24 @@
                                     :title="`${b.label}\n第 ${row} 格\n開出 ${b.resultPlaces[row-1]} 次 / 該區間 ${b.resultTotal} 顆球\n占比 ${(b.resultTotal ? b.resultPlaces[row-1]/b.resultTotal*100 : 0).toFixed(1)}%`">{{ b.resultPlaces[row-1] ? Math.round(b.resultPlaces[row-1] / b.resultTotal * 100) : '' }}</div>
                             </div>
 
+                            <div class="text-xs font-bold text-amber-300 mt-5 mb-1 sticky left-0">契合度分數</div>
+                            <div class="text-[10px] text-gray-500 mb-2 sticky left-0">
+                                0 = 與隨機無異；100 = 押 3 格且 3 顆全中的水準；押 1 格且中 1 顆為 50。全押 9 格不列入評估
+                            </div>
+                            <div class="flex items-center gap-px">
+                                <div class="w-6 shrink-0 sticky left-0 bg-slate-900/80"></div>
+                                <div v-for="(b, i) in betTrendBuckets" :key="i"
+                                    class="h-7 flex-1 min-w-[32px] rounded-sm cursor-help flex items-center justify-center text-[9px] font-bold border border-white/5"
+                                    :class="!b.align ? 'text-gray-600' : (b.align.score > 0 ? 'text-amber-200' : 'text-slate-400')"
+                                    :style="{ backgroundColor: !b.align ? 'rgba(30,41,59,0.5)'
+                                        : (b.align.score >= 0
+                                            ? `rgba(251,191,36,${Math.min(0.6, b.align.score / 100 * 0.55 + 0.06).toFixed(2)})`
+                                            : `rgba(100,116,139,${Math.min(0.5, -b.align.score / 100 * 0.45 + 0.06).toFixed(2)})`) }"
+                                    :title="b.align ? `${b.label}\n契合度分數 ${b.align.score.toFixed(1)}\n實際命中 ${b.align.hit} 顆 / 期望 ${b.align.exp.toFixed(2)} 顆\n可評估 ${b.align.evaluable} 局（全押 ${b.align.full} 局不計入）` : `${b.label}\n無可評估的局`">
+                                    {{ b.align ? b.align.score.toFixed(0) : '—' }}
+                                </div>
+                            </div>
+
                             <div class="flex items-center gap-px mt-2">
                                 <div class="w-6 shrink-0"></div>
                                 <div v-for="(b, i) in betTrendBuckets" :key="i"
@@ -741,8 +774,9 @@
                             </div>
 
                             <div class="mt-4 text-[10px] text-gray-500 sticky left-0 leading-relaxed">
-                                兩塊圖的欄位一一對應。若上方深色的列與下方深色的列長期錯開，代表這位玩家偏好的格位與實際開獎無關；
-                                若跟著移動，才值得進一步檢查。單一區間的樣本很小，請看趨勢不要看單欄。
+                                兩塊圖的欄位一一對應。契合度分數那一列若持續往上爬，代表這位玩家押得越來越準（0 分是隨機水準，100 分等於每局都押 3 格且 3 顆全中）；
+                                但單一區間的樣本極小（每 5 局只有 15 顆球），任何一欄都可能純屬巧合，請看趨勢不要看單欄。
+                                另外全站有數千位玩家，光靠機率就會有少數人出現 |z| ≥ 3，單看一位玩家的 z 不足以下結論。
                             </div>
                         </div>
                     </div>
@@ -1235,6 +1269,7 @@
                             betPlaces, resultPlaces,
                             betTotal: betPlaces.reduce((a, b) => a + b, 0),
                             resultTotal: resultPlaces.reduce((a, b) => a + b, 0),
+                            align: alignmentOf(list),
                             from: list[0].billTime, to: list[list.length - 1].billTime
                         });
                     };
@@ -1265,6 +1300,62 @@
                     return out;
                 });
 
+                // ===== 下注與開獎的契合度 =====
+                // 問題: 直接看「有沒有中」會被押注格數綁架 —— 押滿 9 格必中, 只押 1 格很難中。
+                // 作法: 拿實際命中的球數, 對比「隨機挑同樣多格」的期望命中數。
+                //   某局押 k 格、開 n 顆球 -> 隨機挑 k 格時每顆球落在其中的機率是 k/9, 期望命中 n*k/9。
+                // 指數 = 實際命中 / 期望命中。押滿 9 格時分子分母都等於 n, 指數恰好 1.00 —— 全押得不到分數。
+                const roundAlignment = (round) => {
+                    const g = physicalGames.value[round.gameCode];
+                    if (!g || !round.places) return null;
+                    const chosen = [];
+                    for (let i = 0; i < 9; i++) if (round.places[i] > 0) chosen.push(i + 1);
+                    const k = chosen.length;
+                    const balls = String(g.rawRes).split(',')
+                        .map(x => parseInt(x)).filter(n => n >= 1 && n <= 9);
+                    if (!k || !balls.length) return null;
+
+                    const n = balls.length, p = k / 9;
+                    const hit = balls.filter(b => chosen.includes(b)).length;
+
+                    // 變異數要考慮同一格開出多顆的情形(那幾顆的中/不中是完全連動的)
+                    const mult = {};
+                    balls.forEach(b => mult[b] = (mult[b] || 0) + 1);
+                    const ms = Object.values(mult);
+                    const sumSq = ms.reduce((a, m) => a + m * m, 0);
+                    const cross = Math.pow(n, 2) - sumSq;
+                    const pairP = k >= 2 ? (k * (k - 1)) / (9 * 8) : 0;
+                    const varH = sumSq * (p - p * p) + cross * (pairP - p * p);
+
+                    return { k, hit, exp: n * p, varH, full: k === 9 };
+                };
+
+                // 基準: 押 3 格且 3 顆球全中, 其標準化效果為 2√2 —— 定為 100 分。
+                // 這個基準同時決定了其他情境的相對分數, 例如押 1 格且中 1 顆是 1.414 -> 50 分,
+                // 因為「用 1 格接住 1 顆球」的難度只有「用 3 格接住 3 顆球」的一半。
+                const ALIGN_ANCHOR = 2 * Math.sqrt(2);
+                const ALIGN_MIN_ROUNDS = 30; // 低於此局數的分數純粹是雜訊, 不給結論
+
+                const alignmentOf = (rounds) => {
+                    let effectSum = 0, hit = 0, exp = 0, varH = 0, evaluable = 0, full = 0;
+                    (rounds || []).forEach(r => {
+                        const a = roundAlignment(r);
+                        if (!a) return;
+                        if (a.full) { full++; return; } // 全押給不出任何資訊, 不該稀釋分數
+                        if (a.varH <= 0) return;
+                        effectSum += (a.hit - a.exp) / Math.sqrt(a.varH);
+                        hit += a.hit; exp += a.exp; varH += a.varH;
+                        evaluable++;
+                    });
+                    if (!evaluable) return null;
+                    return {
+                        score: effectSum / evaluable / ALIGN_ANCHOR * 100,
+                        z: varH > 0 ? (hit - exp) / Math.sqrt(varH) : null,
+                        hit, exp, evaluable, full,
+                        reliable: evaluable >= ALIGN_MIN_ROUNDS
+                    };
+                };
+
                 // 熱區格的樣式: 以「占該區間的比例」決定深淺, 而不是絕對次數 ——
                 // 否則局數多的區間整條都是深色, 看不出分布形狀。
                 const heatCell = (count, total, hue) => {
@@ -1279,6 +1370,11 @@
 
                 watch(betTrendMode, (v) => store.set('livemines_trend_mode', v));
                 watch(betTrendSize, (v) => store.set('livemines_trend_size', v));
+
+                const playerAlignment = computed(() => {
+                    const p = selectedPlayer.value;
+                    return p && p.rounds ? alignmentOf(p.rounds) : null;
+                });
 
                 const betTrendTotals = computed(() => {
                     const b = betTrendBuckets.value;
@@ -2285,7 +2381,7 @@
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
-                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell,
+                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
