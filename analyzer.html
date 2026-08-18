@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.10</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.11</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1010,57 +1010,100 @@
                     </div>
                 </div>
 
-                <!-- ===== D. 成長槓桿 ===== -->
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-xl font-bold text-white mb-1">成長槓桿</h3>
-                    <p class="text-sm text-gray-400 mb-5">目前流失最多、也最有機會撿回來的兩個地方。</p>
+                <!-- ===== C. 落球分析 ===== -->
+                <div class="glass rounded-2xl p-6" v-if="houseStats.ballPattern.rounds">
+                    <h3 class="text-xl font-bold text-white mb-1">落球分析</h3>
+                    <p class="text-sm text-gray-400 mb-5">
+                        每局開 3 顆球。重複球本來就刻意高於獨立抽樣，所以這裡對照的是<span class="text-gray-300">上線前訂好的設計值</span>。
+                    </p>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
-                            <div class="font-bold text-white mb-4">在場的人有多少真的下注</div>
-                            <div class="space-y-3">
-                                <div v-for="s in [
-                                        { label: '下注時段在場人次', val: houseStats.bettime, color: 'bg-cyan-500' },
-                                        { label: '其中實際下注人次', val: houseStats.betPlayer, color: 'bg-emerald-500' }
-                                    ]" :key="s.label">
-                                    <div class="flex justify-between text-xs mb-1">
-                                        <span class="text-gray-400">{{ s.label }}</span>
-                                        <span class="text-white font-bold">{{ s.val.toLocaleString() }}
-                                            <span class="text-gray-500 font-normal">（{{ (s.val / houseStats.bettime * 100).toFixed(1) }}%）</span>
-                                        </span>
-                                    </div>
-                                    <div class="h-2.5 bg-slate-900 rounded-full overflow-hidden">
-                                        <div class="h-full rounded-full" :class="s.color" :style="{ width: (s.val / houseStats.bettime * 100) + '%' }"></div>
-                                    </div>
+                    <!-- 球型分布 -->
+                    <div class="mb-6">
+                        <h4 class="text-sm font-bold text-gray-300 mb-3">球型分布（{{ houseStats.ballPattern.rounds.toLocaleString() }} 局）</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div v-for="p in [
+                                    { key: '三球皆不同', d: houseStats.ballPattern.distinct },
+                                    { key: '雙同球', d: houseStats.ballPattern.pair },
+                                    { key: '三同球', d: houseStats.ballPattern.triple }
+                                ]" :key="p.key"
+                                class="bg-slate-800/50 rounded-xl p-4 border cursor-help"
+                                :class="Math.abs(p.d.z) >= 3 ? 'border-amber-500/40' : 'border-white/5'"
+                                :title="`實際 ${p.d.count.toLocaleString()} 局（${p.d.pct.toFixed(2)}%）
+設計值 ${p.d.specPct.toFixed(2)}%
+差 ${p.d.diff >= 0 ? '+' : ''}${p.d.diff.toFixed(2)}pp，約 ${Math.abs(p.d.z).toFixed(1)} 個標準誤`">
+                                <div class="text-xs text-gray-500 mb-1">{{ p.key }}</div>
+                                <div class="flex items-baseline gap-2">
+                                    <span class="text-2xl font-bold text-white">{{ p.d.pct.toFixed(2) }}%</span>
+                                    <span class="text-xs text-gray-500">設計 {{ p.d.specPct.toFixed(2) }}%</span>
+                                </div>
+                                <div class="text-xs mt-1" :class="Math.abs(p.d.z) >= 3 ? 'text-amber-400' : (Math.abs(p.d.z) >= 2 ? 'text-gray-400' : 'text-green-400')">
+                                    {{ p.d.diff >= 0 ? '+' : '' }}{{ p.d.diff.toFixed(2) }}pp
+                                    <span class="text-gray-600">· {{ p.d.count.toLocaleString() }} 局</span>
+                                    <span v-if="Math.abs(p.d.z) < 2" class="text-green-400">· 符合設計</span>
                                 </div>
                             </div>
-                            <p class="text-sm text-gray-300 mt-4 leading-relaxed">
-                                下注時段在場的人裡，只有
-                                <span class="font-bold text-emerald-400">{{ (houseStats.betPlayer / houseStats.bettime * 100).toFixed(1) }}%</span>
-                                真的出手 —— 每局中位數是
-                                <span class="font-bold text-white">{{ houseStats.convMedian.toFixed(0) }}%</span>。
-                                人進得來，轉化才是問題。
-                            </p>
-                            <div class="mt-4 pt-4 border-t border-white/10">
-                                <div class="flex items-baseline justify-between">
-                                    <span class="text-xs text-gray-400">開獎過程中的人數淨變化</span>
-                                    <span class="font-bold" :class="houseStats.endtime >= houseStats.bettime ? 'text-green-400' : 'text-red-400'">
-                                        {{ houseStats.endtime >= houseStats.bettime ? '+' : '' }}{{ (houseStats.endtime - houseStats.bettime).toLocaleString() }}
-                                        <span class="text-xs font-normal">（{{ ((houseStats.endtime - houseStats.bettime) / houseStats.bettime * 100).toFixed(2) }}%）</span>
-                                    </span>
-                                </div>
-                                <p class="text-xs text-gray-500 mt-1">
-                                    比較下注倒數當下與開獎結束瞬間的房內人數：{{ houseStats.roundsUp }} 局變多、{{ houseStats.roundsDown }} 局變少。
-                                    <span v-if="houseStats.endtime >= houseStats.bettime">開獎過程本身會把人留住，甚至吸引人進來看。</span>
-                                    <span v-else>開獎過程正在流失觀眾，值得檢查節奏或呈現方式。</span>
-                                </p>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mt-3 leading-relaxed">
+                            「三球皆不同」與「雙同球」是互補的，兩者的偏差必然大小相同、方向相反，算同一個偏離而非兩個獨立證據。
+                            以目前 {{ houseStats.ballPattern.rounds.toLocaleString() }} 局計，單一比例的標準誤約
+                            {{ (Math.sqrt(0.25 / houseStats.ballPattern.rounds) * 100).toFixed(2) }}pp。
+                        </p>
+                    </div>
+
+                    <!-- 落點對照 -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div v-for="t in [
+                                { key: '雙同球落在哪一格', rows: houseStats.ballPattern.pairCells, chi: houseStats.ballPattern.pairChi, hue: 'rgba(99,102,241,' },
+                                { key: '三同球落在哪一格', rows: houseStats.ballPattern.tripleCells, chi: houseStats.ballPattern.tripleChi, hue: 'rgba(251,191,36,' },
+                                { key: '全部球的落點（對照）', rows: houseStats.ballPattern.allCells, chi: houseStats.ballPattern.allChi, hue: 'rgba(52,211,153,' }
+                            ]" :key="t.key">
+                            <div class="flex items-baseline justify-between mb-2">
+                                <h4 class="text-sm font-bold text-gray-300">{{ t.key }}</h4>
+                                <span class="text-[10px] cursor-help"
+                                    :class="t.chi > 15.51 ? 'text-amber-400' : 'text-gray-500'"
+                                    title="卡方檢定 (df=8)，5% 臨界值 15.51。超過代表分布不均勻的程度已超出隨機波動。">
+                                    卡方 {{ t.chi.toFixed(1) }}{{ t.chi > 15.51 ? ' ⚠' : '' }}
+                                </span>
                             </div>
-                            <p class="text-xs text-gray-500 mt-3 leading-relaxed">
-                                註：轉化率實際比上面更低 ——「下注人次」的官方定義含 0 元參與者
-                                （{{ houseStats.zeroBetRounds }} 局投注額為 0 卻仍記有下注人數）。
+                            <table class="w-full text-xs">
+                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
+                                    <th class="py-1">格</th><th class="py-1 text-right">次數</th>
+                                    <th class="py-1 text-right">占比</th><th class="py-1 text-right">z</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="c in t.rows" :key="c.place" class="border-b border-white/5">
+                                        <td class="py-1">
+                                            <span class="inline-block w-5 text-center rounded text-white"
+                                                :style="{ backgroundColor: t.hue + Math.min(0.75, Math.abs(c.z) / 4 * 0.7 + 0.08).toFixed(2) + ')' }">{{ c.place }}</span>
+                                        </td>
+                                        <td class="py-1 text-right text-gray-400">{{ c.count.toLocaleString() }}</td>
+                                        <td class="py-1 text-right text-gray-300">{{ c.pct.toFixed(2) }}%</td>
+                                        <td class="py-1 text-right font-bold"
+                                            :class="Math.abs(c.z) >= 2 ? (c.z > 0 ? 'text-amber-400' : 'text-sky-400') : 'text-gray-600'">
+                                            {{ c.z > 0 ? '+' : '' }}{{ c.z.toFixed(2) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p v-if="t.key.indexOf('三同') === 0 && houseStats.ballPattern.triple.count < 200" class="text-[10px] text-gray-500 mt-2">
+                                僅 {{ houseStats.ballPattern.triple.count }} 局，每格期望不到 {{ Math.ceil(houseStats.ballPattern.triple.count / 9) }} 次，卡方在此樣本下不可靠，僅供觀察。
                             </p>
                         </div>
+                    </div>
 
+                    <p class="text-xs text-gray-500 mt-4 leading-relaxed">
+                        內部對照：雙同球局裡「落單那一顆」的落點卡方為
+                        <span class="font-bold text-gray-400">{{ houseStats.ballPattern.oddChi.toFixed(1) }}</span>。
+                        若它接近均勻而重複的那顆明顯偏斜，代表偏誤集中在「重複」這件事上，而不是整體落球都偏。
+                    </p>
+                </div>
+
+                <!-- ===== D. 營運節奏 ===== -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-1">營運節奏</h3>
+                    <p class="text-sm text-gray-400 mb-5">開局是否順暢，有沒有被個別長局卡住。</p>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
                             <div class="font-bold text-white mb-1">被長局卡住的時間</div>
                             <p class="text-xs text-gray-500 mb-4">
@@ -2053,6 +2096,9 @@
 
                 // 每天早上的例行維護時段(分鐘, 由 00:00 起算)。實測維護會從 06:5x 拖到 09:2x,
                 // 所以抓寬一點, 只用來把「維護造成的長局」跟真正的異常長局分開。
+                // 上線前訂好的落球型態設計值(%)。改版若調整了落球規則, 這裡要跟著改, 否則對照沒有意義。
+                const BALL_PATTERN_SPEC = { distinct: 50.00, pair: 45.50, triple: 4.50 };
+
                 const MAINTENANCE_FROM = 6 * 60 + 30;
                 const MAINTENANCE_TO = 9 * 60 + 30;
 
@@ -2158,6 +2204,67 @@
                     const spanMs = new Date(byTime[byTime.length - 1]['Start Time']) - new Date(byTime[0]['Start Time']);
                     const spanHours = spanMs / 3600000;
 
+                    // --- 落球型態: 每局 3 顆球, 看重複結構與落點 ---
+                    // 若是 3 顆獨立均勻抽取(可重複), 理論上 皆不同 504/729、雙同 216/729、三同 9/729。
+                    const balls9 = Array(9).fill(0);
+                    const pattern = { distinct: 0, pair: 0, triple: 0 };
+                    const pairCells = Array(9).fill(0);
+                    const tripleCells = Array(9).fill(0);
+                    const oddCells = Array(9).fill(0); // 雙同局裡「落單那顆」的落點, 當內部對照
+                    let patternRounds = 0;
+                    approved.forEach(r => {
+                        const b = String(r['Result']).split(',').map(x => parseInt(x)).filter(x => x >= 1 && x <= 9);
+                        if (b.length !== 3) return;
+                        patternRounds++;
+                        b.forEach(x => balls9[x - 1]++);
+                        const m = {};
+                        b.forEach(x => m[x] = (m[x] || 0) + 1);
+                        const top = Math.max(...Object.values(m));
+                        if (top === 3) { pattern.triple++; tripleCells[b[0] - 1]++; }
+                        else if (top === 2) {
+                            pattern.pair++;
+                            for (const key in m) {
+                                if (m[key] === 2) pairCells[key - 1]++; else oddCells[key - 1]++;
+                            }
+                        } else pattern.distinct++;
+                    });
+                    // 對照的是「上線前訂好的落球設計值」, 不是獨立均勻抽樣的理論值 ——
+                    // 重複球本來就刻意高於獨立抽樣, 拿理論值比會一直誤報。
+                    const patternRow = (count, specPct) => {
+                        const p = specPct / 100;
+                        const pct = patternRounds ? count / patternRounds * 100 : 0;
+                        const sd = patternRounds > 0 ? Math.sqrt(p * (1 - p) / patternRounds) * 100 : 0;
+                        return {
+                            count, pct, specPct, diff: pct - specPct,
+                            z: sd > 0 ? (pct - specPct) / sd : 0
+                        };
+                    };
+                    const chiSq = (counts) => {
+                        const total = counts.reduce((a, b) => a + b, 0);
+                        if (!total) return 0;
+                        const e = total / 9;
+                        return counts.reduce((s, o) => s + Math.pow(o - e, 2) / e, 0);
+                    };
+                    const cellRows = (counts) => {
+                        const total = counts.reduce((a, b) => a + b, 0);
+                        const e = total / 9;
+                        return counts.map((c, i) => ({
+                            place: i + 1, count: c,
+                            pct: total ? c / total * 100 : 0,
+                            z: e > 0 ? (c - e) / Math.sqrt(e * (1 - 1 / 9)) : 0
+                        }));
+                    };
+                    const ballPattern = {
+                        rounds: patternRounds,
+                        distinct: patternRow(pattern.distinct, BALL_PATTERN_SPEC.distinct),
+                        pair: patternRow(pattern.pair, BALL_PATTERN_SPEC.pair),
+                        triple: patternRow(pattern.triple, BALL_PATTERN_SPEC.triple),
+                        pairCells: cellRows(pairCells), pairChi: chiSq(pairCells),
+                        tripleCells: cellRows(tripleCells), tripleChi: chiSq(tripleCells),
+                        oddChi: chiSq(oddCells),
+                        allCells: cellRows(balls9), allChi: chiSq(balls9)
+                    };
+
                     // --- Jackpot: 獎池是負債, 命中與否對 PM 的意義完全不同 ---
                     const poolNow = n(byTime[byTime.length - 1]['Jackpot Pool']);
                     const jpHits = approved.filter(r => n(r['JP Win']) > 0).length;
@@ -2175,7 +2282,7 @@
                             code: r['Game Code'], bet: n(r['Bet Amount']), bg: n(r['BG Win']), total: n(r['Total Win'])
                         })),
                         ggrWithoutBg: ggr + bgWin,
-                        poolNow, jpHits,
+                        poolNow, jpHits, ballPattern,
                         tailCurve, worstOne, worstList: worstFirst.slice(0, 5),
                         ggrDrop1: tailCurve[1] ? tailCurve[1].ggr : ggr,
                         ggrDrop10: tailCurve[10] ? tailCurve[10].ggr : ggr,
