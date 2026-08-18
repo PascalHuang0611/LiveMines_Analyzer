@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.30</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.31</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -219,11 +219,15 @@
 
         <!-- 封面: 還沒載入資料時, 以及載入過程中顯示; 載完就收起來 -->
         <div v-if="showCover && coverImage" class="relative rounded-2xl overflow-hidden mb-6 border border-white/10 animate-fade-in">
-            <!-- 完整顯示整張圖: object-contain + 不設固定像素高度, 否則 3:2 的圖會被裁成中間一條。
-                 用 vh 上限避免圖片把下面的內容擠出畫面外。 -->
-            <img :src="coverImage" alt="" class="block mx-auto w-auto h-auto max-w-full max-h-[62vh]"
+            <!-- 襯底: 同一張圖放大模糊, 讓左右留白變成圖片自己的環境光而不是一塊死色。
+                 用的是同一個檔案, 不會多一次下載。放大是為了避開模糊在邊緣造成的透明帶。 -->
+            <div class="absolute inset-0 bg-cover bg-center scale-125 blur-2xl opacity-50"
+                :style="{ backgroundImage: 'url(' + coverImage + ')' }"></div>
+            <div class="absolute inset-0 bg-slate-950/45"></div>
+            <!-- 主圖完整顯示: 不設固定像素高度, 否則 3:2 的圖會被裁成中間一條 -->
+            <img :src="coverImage" alt="" class="relative block mx-auto w-auto h-auto max-w-full max-h-[62vh] rounded-lg shadow-2xl shadow-black/50"
                 @error="coverFailed = true">
-            <div v-if="isProcessing" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/70">
+            <div v-if="isProcessing" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/70">
                 <svg class="animate-spin h-10 w-10 text-indigo-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor"
