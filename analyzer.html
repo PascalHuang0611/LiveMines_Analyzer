@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.98</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v0.99</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -402,10 +402,16 @@
                     全站玩家排行
                 </h3>
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4 -mt-2">
-                    <p class="text-sm text-gray-400">支援向下滾動檢視所有玩家，或輸入帳號片段搜尋。</p>
+                    <p class="text-sm text-gray-400">
+                        支援向下滾動檢視所有玩家，或輸入{{ nicknameCount ? '暱稱／帳號' : '帳號' }}片段搜尋。
+                        <span v-if="nicknameCount" class="text-gray-500">
+                            已對到 {{ nicknameCount.toLocaleString() }} / {{ sortedPlayers.length.toLocaleString() }} 個暱稱。
+                        </span>
+                        <span v-else class="text-gray-500">（把 nicknames.json 放進同一個資料夾即可顯示暱稱）</span>
+                    </p>
                     <div class="relative w-full md:w-80 shrink-0">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">🔍</span>
-                        <input type="text" v-model="playerSearch" placeholder="搜尋玩家帳號（模糊比對）"
+                        <input type="text" v-model="playerSearch" :placeholder="nicknameCount ? '搜尋暱稱或帳號（模糊比對）' : '搜尋玩家帳號（模糊比對）'"
                             class="w-full bg-gray-800 text-white border border-gray-600 rounded-lg pl-9 pr-8 py-2 text-sm focus:border-indigo-500 focus:outline-none placeholder-gray-500">
                         <button v-if="playerSearch" @click="playerSearch = ''" title="清除搜尋"
                             class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white w-5 h-5 rounded-full hover:bg-white/10 flex items-center justify-center text-xs">✕</button>
@@ -439,13 +445,19 @@
                         <tbody>
                             <tr v-if="!filteredPlayers.length">
                                 <td colspan="6" class="p-8 text-center text-gray-500">
-                                    找不到帳號包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
+                                    找不到{{ nicknameCount ? '暱稱或帳號' : '帳號' }}包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
                                 </td>
                             </tr>
                             <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-                                <td class="p-3 text-left font-bold text-indigo-300">
-                                    <span v-for="(part, i) in highlightParts(player.account)" :key="i"
-                                        :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded px-0.5' : ''">{{ part.text }}</span>
+                                <td class="p-3 text-left">
+                                    <div class="font-bold" :class="nicknameOf(player) ? 'text-indigo-300' : 'text-gray-400 font-mono text-xs'">
+                                        <span v-for="(part, i) in highlightParts(displayName(player))" :key="i"
+                                            :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded px-0.5' : ''">{{ part.text }}</span>
+                                    </div>
+                                    <div v-if="nicknameOf(player)" class="text-[10px] text-gray-500 font-mono mt-0.5">
+                                        <span v-for="(part, i) in highlightParts(player.account)" :key="i"
+                                            :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded' : ''">{{ part.text }}</span>
+                                    </div>
                                 </td>
                                 <td class="p-3">{{ formatMoney(player.totalTurnover) }}</td>
                                 <td class="p-3">{{ formatMoney(player.totalPayout) }}</td>
@@ -469,10 +481,11 @@
                     ✕
                 </button>
                 <div class="p-6 border-b border-white/10">
-                    <h3 class="text-2xl font-bold flex items-center gap-3">
-                        <span class="text-indigo-400">{{ selectedPlayer.account }}</span>
+                    <h3 class="text-2xl font-bold flex items-center gap-3 flex-wrap">
+                        <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-400 font-mono text-lg'">{{ displayName(selectedPlayer) }}</span>
                         <span class="text-sm px-2 py-1 rounded bg-white/10 text-gray-300 font-normal border border-white/5">{{ selectedPlayer.segment }}</span>
                     </h3>
+                    <div v-if="nicknameOf(selectedPlayer)" class="text-xs text-gray-500 font-mono mt-1">{{ selectedPlayer.account }}</div>
                 </div>
                 <div class="p-6 space-y-6">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -613,6 +626,9 @@
 
                 <div class="p-6 flex-1 min-h-0 relative">
                     <canvas id="playerChart"></canvas>
+                </div>
+                <div v-if="balanceGaps > 0" class="px-6 pb-4 -mt-2 text-xs text-amber-400/80">
+                    ⚠ 有 {{ balanceGaps }} 局的注單沒有餘額資料，餘額線在該處會斷開（不以其他數值代替）。
                 </div>
             </div>
         </div>
@@ -875,6 +891,8 @@
                 const processedFiles = ref(0);
                 const totalRawRows = ref(0);
                 const duplicateBills = ref(0); // 匯出分頁邊界重複、已被略過的注單筆數
+                const nicknameMap = ref({});   // key: Agent + Account -> 暱稱
+                const nicknameHits = ref(0);   // 有對到暱稱的玩家數
                 const billTimeSpan = ref(null); // { min, max } 注單檔涵蓋的時間
                 const gameTimeSpan = ref(null); // { min, max } 大盤檔涵蓋的時間
                 const coverageGap = ref(null);  // { gamesMissingBills, billRoundsMissingGame } 局層級的實際落差
@@ -956,6 +974,7 @@
                 let houseTailChartInstance = null;
                 let houseRtpChartInstance = null;
                 let chartCache = null;
+                const balanceGaps = ref(0); // 目前這位玩家有幾局缺餘額資料
 
                 const chartStart = ref(1);
                 const chartEnd = ref(1);
@@ -991,8 +1010,37 @@
                     return (sec / 86400).toFixed(1) + ' 天';
                 };
 
+                // 暱稱對照檔 (nicknames.json) 的 key 是 Agent + Account, 例如 "TGB25" + 32 碼帳號。
+                // 值是陣列 (少數帳號有多個暱稱), 取第一個當顯示名稱。
+                const parseNicknameFile = (text) => {
+                    const json = JSON.parse(text);
+                    const users = json && json.users ? json.users : json;
+                    const map = {};
+                    for (const key in users) {
+                        const v = users[key];
+                        const name = Array.isArray(v) ? v[0] : v;
+                        if (name) map[key] = String(name);
+                    }
+                    return map;
+                };
+
                 const handleFileSelect = async (event) => {
-                    const files = Array.from(event.target.files).filter(f => f.name.endsWith('.csv'));
+                    const picked = Array.from(event.target.files);
+                    const files = picked.filter(f => f.name.endsWith('.csv'));
+                    const jsonFiles = picked.filter(f => f.name.toLowerCase().endsWith('.json'));
+
+                    // 暱稱檔跟 CSV 放在同一個資料夾就會一起被讀進來, 不需要另外上傳到任何地方
+                    if (jsonFiles.length) {
+                        for (const jf of jsonFiles) {
+                            try {
+                                const map = parseNicknameFile(await jf.text());
+                                if (Object.keys(map).length) nicknameMap.value = { ...nicknameMap.value, ...map };
+                            } catch (e) {
+                                console.warn('暱稱檔解析失敗:', jf.name, e);
+                            }
+                        }
+                    }
+
                     if (files.length === 0) return;
 
                     isProcessing.value = true;
@@ -1107,6 +1155,7 @@
                                         if(!playerAgg[account]) {
                                             playerAgg[account] = {
                                                 account: account,
+                                                agent: row['Agent'] || '', // 與 Account 合併後才是暱稱對照表的 key
                                                 totalTurnover: 0,
                                                 totalPayout: 0,
                                                 winLoss: 0,
@@ -1653,11 +1702,29 @@
                     return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`;
                 };
 
-                // 玩家帳號搜尋: 不分大小寫的片段比對, 貼上完整 ACCID 或只記得幾碼都能找
+                const nicknameCount = computed(() => {
+                    if (!Object.keys(nicknameMap.value).length) return 0;
+                    return Object.values(playersMap.value).filter(p => nicknameMap.value[(p.agent || '') + p.account]).length;
+                });
+
+                // 對照表沒有這個帳號時回傳 null —— 呼叫端自己決定要顯示什麼, 不要在這裡編一個假名字
+                const nicknameOf = (player) => {
+                    if (!player) return null;
+                    return nicknameMap.value[(player.agent || '') + player.account] || null;
+                };
+
+                // 有暱稱就顯示暱稱, 沒有就退回帳號 —— 帳號本身就是可辨識的, 硬掛「未命名」只是多一層雜訊
+                const displayName = (player) => nicknameOf(player) || player.account;
+
+                // 玩家搜尋: 暱稱與帳號都比對, 不分大小寫的片段比對
                 const filteredPlayers = computed(() => {
                     const q = playerSearch.value.trim().toLowerCase();
                     if (!q) return sortedPlayers.value;
-                    return sortedPlayers.value.filter(p => String(p.account).toLowerCase().includes(q));
+                    return sortedPlayers.value.filter(p => {
+                        if (String(p.account).toLowerCase().includes(q)) return true;
+                        const nick = nicknameOf(p);
+                        return nick ? nick.toLowerCase().includes(q) : false;
+                    });
                 });
 
                 // 把帳號拆成 [未命中, 命中, 未命中...] 好在表格裡標出比對到的位置
@@ -1708,7 +1775,7 @@
 
                     let accBet = 0;
                     let accWin = 0;
-                    let balance = 0;
+                    let missingBalance = 0;
 
                     const timeFormatter = new Intl.DateTimeFormat('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -1716,12 +1783,11 @@
                         accBet += r.bet;
                         accWin += r.payout;
                         
-                        // Use actual balance from CSV if available, otherwise use running winLoss
-                        if (r.balance > 0 || r.balance < 0) {
-                            balance = r.balance;
-                        } else {
-                            balance += r.winLoss;
-                        }
+                        // 只畫 CSV 裡真正的餘額。舊版在缺值時改用「從 0 累加盈虧」補線,
+                        // 但那是完全不同的量(累計盈虧會是負的), 混在同一條線上會讓餘額看起來變負數。
+                        // 缺值就留空, 讓線斷開 —— 寧可看得出資料缺, 也不要拿別的東西冒充。
+                        const balance = (r.balance > 0 || r.balance < 0) ? r.balance : null;
+                        if (balance === null) missingBalance++;
 
                         const timeStr = r.billTime ? timeFormatter.format(new Date(r.billTime)) : '';
                         labels.push([`第 ${idx + 1} 局`, timeStr]);
@@ -1732,6 +1798,7 @@
                     });
 
                     chartCache = { labels, betData, winData, rtpData, balanceData };
+                    balanceGaps.value = missingBalance;
 
                     nextTick(() => {
                         renderPlayerChart();
@@ -1802,6 +1869,7 @@
                                     pointRadius: 0,
                                     tension: 0.1,
                                     fill: false,
+                                    spanGaps: false, // 缺值處讓線斷開, 不要自行連過去
                                     order: 0
                                 }
                             ]
@@ -1844,9 +1912,10 @@
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
+                    nicknameOf, displayName, nicknameCount, nicknameMap, playersMap,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
-                    chartStart, chartEnd, chartMax, renderPlayerChart
+                    chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
         }).mount('#app');
