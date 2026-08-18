@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.15</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.16</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -233,7 +233,13 @@
         <!-- 時間範圍: 只有資料跨多日時才需要 -->
         <div v-if="!isProcessing && availableDays.length > 1"
             class="glass rounded-2xl px-5 py-4 mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 animate-fade-in-delayed">
-            <span class="text-sm text-gray-400 shrink-0">時間範圍</span>
+            <span class="text-sm text-gray-400 shrink-0 cursor-help"
+                :title="`營運日以每天 ${String(dayCutoverHour).padStart(2,'0')}:00 換日，對齊每日維護時段。\n凌晨的局會歸到前一個營運日，避免把同一個通宵場切成兩天。`">
+                時間範圍
+                <span class="text-[10px] text-gray-500 border border-white/10 rounded px-1 py-px ml-1 align-middle">
+                    {{ String(dayCutoverHour).padStart(2,'0') }}~{{ String(dayCutoverHour).padStart(2,'0') }}
+                </span>
+            </span>
 
             <div class="flex items-center gap-2">
                 <select v-model="rangeFrom" class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm">
@@ -268,6 +274,12 @@
                         最近 {{ n }} 天
                     </button>
                 </template>
+            </div>
+
+            <div class="basis-full text-[11px] text-gray-500 -mt-1">
+                以每日 {{ String(dayCutoverHour).padStart(2,'0') }}:00 為換日基準（對齊維護時段）——
+                例如「{{ availableDays[0] }}」代表 {{ availableDays[0] }} {{ String(dayCutoverHour).padStart(2,'0') }}:00
+                至隔日 {{ String(dayCutoverHour).padStart(2,'0') }}:00。
             </div>
 
             <div class="text-xs ml-auto text-right">
@@ -1291,12 +1303,23 @@
                 const rangeFrom = ref('');  // YYYY-MM-DD, 含當日
                 const rangeTo = ref('');    // YYYY-MM-DD, 含當日
 
+                // 營運日以每天 08:00 換日, 對齊維護時段 —— 凌晨的局歸前一天, 才不會把一個通宵場切成兩半。
+                const DAY_CUTOVER_HOUR = 8;
+                const gamingDay = (wall) => {
+                    if (!wall) return null;
+                    const h = parseInt(wall.slice(11, 13));
+                    let t = Date.UTC(+wall.slice(0, 4), +wall.slice(5, 7) - 1, +wall.slice(8, 10));
+                    if (h < DAY_CUTOVER_HOUR) t -= 86400000;
+                    const d = new Date(t), p = n => String(n).padStart(2, '0');
+                    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+                };
+
                 const availableDays = computed(() => {
                     const days = new Set();
-                    allRounds.value.forEach(r => { if (r.wallTime) days.add(r.wallTime.slice(0, 10)); });
+                    allRounds.value.forEach(r => { const d = gamingDay(r.wallTime); if (d) days.add(d); });
                     (gameResultsData.value || []).forEach(g => {
-                        const w = wallClock(g['Start Time']);
-                        if (w) days.add(w.slice(0, 10));
+                        const d = gamingDay(wallClock(g['Start Time']));
+                        if (d) days.add(d);
                     });
                     return [...days].sort();
                 });
@@ -1326,10 +1349,10 @@
                     return !d.length || (rangeFrom.value === d[0] && rangeTo.value === d[d.length - 1]);
                 });
 
-                // 落在範圍內嗎。傳入的是 "YYYY-MM-DD HH:MM:SS" 這種字串, 直接比前 10 碼
+                // 落在範圍內嗎。比的是「營運日」而非日曆日, 所以 08:00 前的局算前一天。
                 const inRange = (wall) => {
-                    if (!wall) return false;
-                    const day = wall.slice(0, 10);
+                    const day = gamingDay(wall);
+                    if (!day) return false;
                     if (rangeFrom.value && day < rangeFrom.value) return false;
                     if (rangeTo.value && day > rangeTo.value) return false;
                     return true;
@@ -2727,6 +2750,7 @@
                     houseStats, fmtInt, fmtHours, alignMinRounds: ALIGN_MIN_ROUNDS, ballWindowSize, ballWindowOptions: BALL_WINDOW_OPTIONS,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     rangeFrom, rangeTo, availableDays, rangeIsFull, resetRange, activeRounds, allRounds,
+                    dayCutoverHour: DAY_CUTOVER_HOUR,
                     setLastDays, isLastDays,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
