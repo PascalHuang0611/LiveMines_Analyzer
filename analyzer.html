@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.18</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.19</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -620,7 +620,7 @@
         
         <!-- Player Modal -->
         <div v-if="selectedPlayer && !showChartModal && !showBetTrendModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
-            <div class="glass rounded-2xl w-full max-w-2xl relative my-auto">
+            <div class="glass rounded-2xl w-full max-w-5xl relative my-auto">
                 <button @click="selectedPlayer = null" class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
                     ✕
                 </button>
@@ -635,7 +635,8 @@
                         <span class="text-gray-400">{{ nicknamesOf(selectedPlayer).join('、') }}</span>
                     </div>
                 </div>
-                <div class="p-6 space-y-6">
+                <div class="p-6 flex flex-col lg:flex-row gap-6 items-start">
+                <div class="flex-1 min-w-0 space-y-6">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">總流水 (Turnover)</div>
@@ -749,6 +750,47 @@
                         </div>
 
                     </div>
+                </div>
+
+                <!-- 每日明細: 獨立在左側區塊之外, 由早到晚, 天數多時自己捲動 -->
+                <div class="w-full lg:w-64 shrink-0 lg:border-l lg:border-white/10 lg:pl-6">
+                    <div class="flex items-baseline justify-between mb-3">
+                        <h4 class="text-sm font-bold text-gray-300">每日明細</h4>
+                        <span class="text-[10px] text-gray-500">{{ playerDays.length }} 天</span>
+                    </div>
+                    <div v-if="!playerDays.length" class="text-xs text-gray-500 py-4">此範圍內沒有下注紀錄。</div>
+                    <div v-else class="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                        <div v-for="d in playerDays" :key="d.day"
+                            class="bg-slate-800/50 rounded-xl p-3 border border-white/5 hover:border-white/15 transition-colors">
+                            <div class="flex items-baseline justify-between mb-2">
+                                <span class="text-sm font-bold text-indigo-300">{{ d.day.slice(5) }}</span>
+                                <span class="text-[10px] text-gray-500">{{ d.rounds.toLocaleString() }} 局</span>
+                            </div>
+                            <div class="flex justify-between text-xs mb-1.5">
+                                <span class="text-gray-500">投注額</span>
+                                <span class="font-bold text-white">{{ formatMoney(d.bet) }}</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-gray-500">初始</span>
+                                <span class="text-gray-400">{{ formatMoney(d.open) }}</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-gray-500">結束</span>
+                                <span :class="d.close >= d.open ? 'text-green-400' : 'text-red-400'">{{ formatMoney(d.close) }}</span>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-white/5 flex justify-between text-xs">
+                                <span class="text-gray-500">餘額變化</span>
+                                <span class="font-bold" :class="d.delta > 0 ? 'text-green-400' : (d.delta < 0 ? 'text-red-400' : 'text-gray-400')">
+                                    {{ d.delta > 0 ? '+' : '' }}{{ formatMoney(d.delta) }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-600 mt-3 leading-relaxed">
+                        餘額取當日第一筆與最後一筆注單的快照，中間的存提款也會反映在差額裡，
+                        所以「餘額變化」不等於當日輸贏。
+                    </p>
+                </div>
                 </div>
             </div>
         </div>
@@ -1623,6 +1665,21 @@
 
                 watch(betTrendMode, (v) => store.set('livemines_trend_mode', v));
                 watch(betTrendSize, (v) => store.set('livemines_trend_size', v));
+
+                // 選中玩家的逐日明細, 由早到晚 —— 卡片是照這個順序疊的
+                const playerDays = computed(() => {
+                    const p = selectedPlayer.value;
+                    if (!p || !p.daily) return [];
+                    return Object.keys(p.daily).sort().map(day => {
+                        const d = p.daily[day];
+                        return {
+                            day, bet: d.bet, rounds: d.rounds,
+                            open: d.open === null ? 0 : d.open,
+                            close: d.close === null ? 0 : d.close,
+                            delta: (d.close === null ? 0 : d.close) - (d.open === null ? 0 : d.open)
+                        };
+                    });
+                });
 
                 const playerAlignment = computed(() => {
                     const p = selectedPlayer.value;
@@ -2849,7 +2906,7 @@
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
-                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment,
+                    betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays,
                     chartStart, chartEnd, chartMax, renderPlayerChart, balanceGaps
                 };
             }
