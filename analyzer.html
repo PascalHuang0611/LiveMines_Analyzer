@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.14</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.15</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -521,7 +521,7 @@
                                     遊玩局數 ↕
                                 </th>
                                 <th class="p-3 cursor-pointer hover:text-white transition-colors" @click="sortBy('alignScore')"
-                                    title="下注格位與開獎的契合度。0 = 與隨機挑格無異，100 = 押 3 格且 3 顆全中的水準。&#10;全押 9 格的局不列入評估。局數少的分數不可信，已標示。">
+                                    title="下注格位與開獎的契合度。0 = 與隨機挑格無異，100 = 押 3 格且 3 顆全中的水準。&#10;全押 9 格的局不列入評估。可評估局數未達門檻者顯示「—」，排序時一律墊底。">
                                     契合度 ↕
                                 </th>
                             </tr>
@@ -562,18 +562,14 @@
                                 <td class="p-3">{{ (player.totalTurnover > 0 ? (player.totalPayout / player.totalTurnover * 100) : 0).toFixed(2) }}%</td>
                                 <td class="p-3">{{ player.roundsCount.toLocaleString() }}</td>
                                 <td class="p-3">
-                                    <template v-if="player.alignScore === null">
-                                        <span class="text-gray-600" title="沒有可評估的局（全押 9 格或無格注）">—</span>
-                                    </template>
-                                    <template v-else>
-                                        <span class="font-bold"
-                                            :class="player.alignRounds < 30 ? 'text-gray-500'
-                                                : (player.alignScore > 0 ? 'text-amber-300' : 'text-slate-400')">
-                                            {{ player.alignScore.toFixed(1) }}
-                                        </span>
-                                        <span v-if="player.alignRounds < 30" class="text-[10px] text-gray-600 ml-1"
-                                            :title="`僅 ${player.alignRounds} 局可評估，樣本不足`">?</span>
-                                    </template>
+                                    <span v-if="player.alignScore === null" class="text-gray-600"
+                                        :title="player.alignRounds > 0
+                                            ? `僅 ${player.alignRounds} 局可評估，未達 ${alignMinRounds} 局，不足以判定`
+                                            : '沒有可評估的局（全押 9 格或無格注）'">—</span>
+                                    <span v-else class="font-bold" :class="player.alignScore > 0 ? 'text-amber-300' : 'text-slate-400'"
+                                        :title="`可評估 ${player.alignRounds} 局`">
+                                        {{ player.alignScore.toFixed(1) }}
+                                    </span>
                                 </td>
                             </tr>
                         </tbody>
@@ -759,14 +755,17 @@
                         <div v-if="playerAlignment" class="mt-0.5"
                             :title="`實際命中 ${playerAlignment.hit} 顆 / 期望 ${playerAlignment.exp.toFixed(1)} 顆\n可評估 ${playerAlignment.evaluable} 局，全押 ${playerAlignment.full} 局不計入 z`">
                             契合度分數
+                            <template v-if="!playerAlignment.reliable">
+                                <span class="text-gray-500">—</span>
+                                <span class="text-gray-600">· 僅 {{ playerAlignment.evaluable }} 局可評估，未達 {{ alignMinRounds }} 局，不足以判定</span>
+                            </template>
+                            <template v-else>
                             <span class="font-bold" :class="playerAlignment.score > 0 ? 'text-amber-300' : 'text-slate-300'">{{ playerAlignment.score.toFixed(1) }}</span>
                             <span class="text-gray-600">· {{ playerAlignment.evaluable }} 局可評估</span>
-                            <template v-if="!playerAlignment.reliable">
-                                <span class="text-amber-500/80">· 樣本不足，僅供參考</span>
-                            </template>
-                            <template v-else-if="playerAlignment.z !== null">
+                            <template v-if="playerAlignment.z !== null">
                                 · z = <span class="font-bold" :class="Math.abs(playerAlignment.z) >= 3 ? 'text-amber-300' : 'text-gray-400'">{{ playerAlignment.z.toFixed(2) }}</span>
                                 <span class="text-gray-600">（{{ Math.abs(playerAlignment.z) < 2 ? '與隨機無異' : (Math.abs(playerAlignment.z) < 3 ? '略有偏離' : '偏離明顯') }}）</span>
+                            </template>
                             </template>
                         </div>
                     </div>
@@ -1717,10 +1716,12 @@
                     Object.values(playerAgg).forEach(p => {
                         p.rtp = p.totalTurnover > 0 ? (p.totalPayout / p.totalTurnover * 100) : 0;
                         p.rounds.sort((a, b) => a.billTime - b.billTime);
-                        // 契合度算一次存起來, 排行榜要排序它, 不能每次 render 重算
+                        // 契合度算一次存起來, 排行榜要排序它, 不能每次 render 重算。
+                        // 局數不足統計意義的一律視為「沒有分數」—— 若給個灰字分數還讓它參與排序,
+                        // 只玩兩局全中的人會拿 100 分衝上榜首, 排序就失去意義了。
                         p.align = alignmentOf(p.rounds);
-                        p.alignScore = p.align ? p.align.score : null;
                         p.alignRounds = p.align ? p.align.evaluable : 0;
+                        p.alignScore = (p.align && p.align.reliable) ? p.align.score : null;
                         p.exbetRtp = p.exbetRoundBet > 0 ? (p.exbetRoundPayout / p.exbetRoundBet * 100) : null;
                         p.plainRtp = p.plainRoundBet > 0 ? (p.plainRoundPayout / p.plainRoundBet * 100) : null;
                         p.exbetLift = (p.exbetRtp !== null && p.plainRtp !== null) ? (p.exbetRtp - p.plainRtp) : null;
@@ -2723,7 +2724,7 @@
 
                 return {
                     activeTab, hasGameData, gameResultsData,
-                    houseStats, fmtInt, fmtHours, ballWindowSize, ballWindowOptions: BALL_WINDOW_OPTIONS,
+                    houseStats, fmtInt, fmtHours, alignMinRounds: ALIGN_MIN_ROUNDS, ballWindowSize, ballWindowOptions: BALL_WINDOW_OPTIONS,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     rangeFrom, rangeTo, availableDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     setLastDays, isLastDays,
