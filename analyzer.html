@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.22</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.23</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -640,7 +640,7 @@
                         <span class="text-gray-400">{{ nicknamesOf(selectedPlayer).join('、') }}</span>
                     </div>
                 </div>
-                <div class="p-6 flex flex-col lg:flex-row gap-6 lg:items-stretch">
+                <div class="p-6 flex flex-col lg:flex-row gap-6 items-start">
                 <div class="flex-1 min-w-0 space-y-6">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
@@ -758,7 +758,7 @@
                 </div>
 
                 <!-- 每日明細: 獨立在左側區塊之外, 由早到晚, 天數多時自己捲動 -->
-                <div class="w-full lg:w-64 shrink-0 lg:border-l lg:border-white/10 lg:pl-6 flex flex-col">
+                <div class="w-full lg:w-64 shrink-0 lg:border-l lg:border-white/10 lg:pl-6">
                     <div class="flex items-baseline justify-between mb-2">
                         <h4 class="text-sm font-bold text-gray-200">每日明細</h4>
                         <span class="text-[10px] text-gray-400">{{ playerDays.length }} 天</span>
@@ -771,7 +771,7 @@
                     </button>
                     <p class="text-[10px] text-gray-400 mb-2">點卡片可只看那一天，左側統計會跟著變。</p>
                     <div v-if="!playerDays.length" class="text-xs text-gray-500 py-4">此範圍內沒有下注紀錄。</div>
-                    <div v-else class="space-y-2 overflow-y-auto pr-1 max-h-[420px] lg:max-h-none lg:flex-1 lg:min-h-0">
+                    <div v-else class="space-y-2 overflow-y-auto pr-1 max-h-[541px]">
                         <div v-for="d in playerDays" :key="d.day" @click="selectedDay = (selectedDay === d.day ? null : d.day)"
                             class="rounded-xl p-3 border transition-colors cursor-pointer"
                             :class="selectedDay === d.day
@@ -801,7 +801,7 @@
                             </div>
                         </div>
                     </div>
-                    <p class="text-[10px] text-gray-400 mt-3 leading-relaxed shrink-0">
+                    <p class="text-[10px] text-gray-400 mt-3 leading-relaxed">
                         餘額取當日第一筆與最後一筆注單的快照，中間的存提款也會反映在差額裡，
                         所以「餘額變化」不等於當日輸贏。
                     </p>
