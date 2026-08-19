@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.33</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.34</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1287,71 +1287,66 @@
                         若它接近均勻而重複的那顆明顯偏斜，代表偏誤集中在「重複」這件事上，而不是整體落球都偏。
                     </p>
 
-                    <!-- 時段掃描 -->
-                    <div class="mt-6 pt-5 border-t border-white/10">
-                        <div class="flex flex-wrap items-center gap-3 mb-2">
-                            <h4 class="text-sm font-bold text-gray-300">有沒有哪一段特別不一樣</h4>
+                    <!-- 分時落球熱力圖 -->
+                    <div v-if="houseStats.ballBuckets.length" class="mt-6 pt-5 border-t border-white/10">
+                        <div class="flex flex-wrap items-center gap-3 mb-3">
+                            <h4 class="text-sm font-bold text-gray-300">落球熱力圖</h4>
+                            <div class="flex rounded-lg overflow-hidden border border-white/10">
+                                <button @click="ballGranMode = 'time'; ballGranSize = 60"
+                                    class="px-3 py-1 text-xs transition-colors"
+                                    :class="ballGranMode === 'time' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依時間</button>
+                                <button @click="ballGranMode = 'rounds'; ballGranSize = 100"
+                                    class="px-3 py-1 text-xs transition-colors"
+                                    :class="ballGranMode === 'rounds' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依局數</button>
+                            </div>
                             <div class="flex gap-1">
-                                <button v-for="w in ballWindowOptions" :key="w" @click="ballWindowSize = w"
-                                    class="px-2 py-0.5 rounded text-[11px] transition-colors border"
-                                    :class="ballWindowSize === w ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
-                                    每 {{ w }} 局
+                                <button v-for="o in ballGranOptions[ballGranMode]" :key="o.v" @click="ballGranSize = o.v"
+                                    class="px-2.5 py-1 rounded text-xs transition-colors border"
+                                    :class="ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5'">
+                                    {{ o.t }}
                                 </button>
                             </div>
-                        </div>
-                        <p class="text-[11px] text-gray-500 mb-3 leading-relaxed">
-                            把場次切成不重疊的窗口，逐段檢定該段落球是否與<span class="text-gray-400">全期的實際分布</span>不同
-                            （不是跟均勻比 —— 全期本身就偏，跟均勻比會每段都亮紅燈）。
-                            共檢定 {{ houseStats.ballScan.tested }} 段，已用 Benjamini-Hochberg 校正多重比較。
-                        </p>
-
-                        <div v-if="!houseStats.ballScan.flagged.length"
-                            class="rounded-xl border border-green-500/30 bg-green-500/5 px-4 py-3 text-sm">
-                            <span class="text-green-400 font-bold">沒有任何時段與全期分布顯著不同。</span>
-                            <span class="text-gray-400">
-                                未校正下有 {{ houseStats.ballScan.rawHits }} 段的 p &lt; 0.05，但校正後全部不成立
-                                —— 檢定 {{ houseStats.ballScan.tested }} 段本來就會有幾段碰巧落在門檻內。
-                            </span>
-                        </div>
-
-                        <div v-else>
-                            <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 mb-3 text-sm">
-                                <span class="text-amber-300 font-bold">{{ houseStats.ballScan.flagged.length }} 段值得留意</span>
-                                <span class="text-gray-400">（檢定 {{ houseStats.ballScan.tested }} 段，未校正下 {{ houseStats.ballScan.rawHits }} 段，校正後剩這些）</span>
+                            <div class="ml-auto flex items-center gap-2 text-[10px] text-gray-400">
+                                <span>偏冷</span>
+                                <span class="inline-block w-24 h-3 rounded border border-white/10"
+                                    style="background:linear-gradient(to right, rgb(0,0,255), rgb(255,255,255), rgb(255,0,0))"></span>
+                                <span>偏熱</span>
                             </div>
-                            <table class="w-full text-xs">
-                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
-                                    <th class="py-1">時段</th><th class="py-1 text-right">局數</th>
-                                    <th class="py-1 text-right">卡方</th><th class="py-1 text-right">p</th>
-                                    <th class="py-1 pl-4">偏離最大的格</th>
-                                </tr></thead>
-                                <tbody>
-                                    <tr v-for="(w, i) in houseStats.ballScan.flagged" :key="i" class="border-b border-white/5">
-                                        <td class="py-1.5 text-gray-300">{{ w.from }} ~ {{ w.to.slice(11) }}</td>
-                                        <td class="py-1.5 text-right text-gray-400">{{ w.rounds }}</td>
-                                        <td class="py-1.5 text-right text-amber-400 font-bold">{{ w.chi.toFixed(1) }}</td>
-                                        <td class="py-1.5 text-right text-gray-400">{{ w.p < 0.001 ? w.p.toExponential(1) : w.p.toFixed(4) }}</td>
-                                        <td class="py-1.5 pl-4">
-                                            <span v-for="c in w.top" :key="c.place" class="mr-2">
-                                                第{{ c.place }}格
-                                                <span :class="c.dev > 0 ? 'text-amber-400' : 'text-sky-400'">
-                                                    {{ c.dev > 0 ? '+' : '' }}{{ c.dev.toFixed(1) }}pp
-                                                </span>
-                                            </span>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <p class="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                                建議換不同窗口大小再看一次：若某段只在最細的窗口出現、放大就消失，多半是雜訊；
-                                跨多種窗口都在同一段，才值得請開發查當時的狀況。此窗口每格期望
-                                {{ houseStats.ballScan.expectPerCell.toFixed(1) }} 次。
-                                <br>
-                                另外：若真的有一段特別極端，它會把「全期平均」也拉過去，使得其他正常時段看起來反向偏離而一起被標記。
-                                卡方最高的那一段才是主嫌，其餘可能只是被對比出來的。
-                            </p>
                         </div>
+                        <p class="text-[11px] text-gray-500 mb-3">
+                            每張九宮格是一個區間，格內數字是該格開出的球數。顏色代表與該區間平均的差距
+                            （以標準差衡量，|z| ≥ 3 為滿色），所以不同大小的區間之間可以直接比較。
+                            共 {{ houseStats.ballBuckets.length }} 個區間。
+                        </p>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 max-h-[560px] overflow-y-auto pr-1">
+                            <div v-for="(b, i) in houseStats.ballBuckets" :key="i"
+                                class="bg-slate-800/40 rounded-lg p-2 border border-white/5">
+                                <div class="flex items-baseline justify-between mb-1.5">
+                                    <span class="text-[11px] font-bold text-gray-300 truncate" :title="b.from + ' ~ ' + b.to">{{ b.label }}</span>
+                                    <span class="text-[9px] text-gray-500 shrink-0 ml-1">{{ b.rounds }} 局</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-px bg-black/40 rounded overflow-hidden">
+                                    <div v-for="g in 9" :key="g"
+                                        class="aspect-square flex items-center justify-center text-[11px] font-bold cursor-help"
+                                        :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
+                                                  color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
+                                        :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
+                                        {{ b.counts[g-1] }}
+                                    </div>
+                                </div>
+                                <div class="text-[9px] text-gray-500 mt-1.5 text-center">
+                                    最熱 <span class="text-red-300">{{ b.hot }}</span> ·
+                                    最冷 <span class="text-blue-300">{{ b.cold }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-3 leading-relaxed">
+                            區間切得越細，每一格分到的球越少、顏色就越容易因為運氣而跳動。
+                            目前平均每格約 {{ (houseStats.ballBuckets.reduce((a, b) => a + b.total, 0) / houseStats.ballBuckets.length / 9).toFixed(1) }} 顆球，
+                            差幾顆顏色就會明顯不同。要判斷是否真的異常，請看較大的區間或上方那三張整體表格。
+                        </p>
                     </div>
+
                 </div>
 
                 <!-- ===== D. 營運節奏 ===== -->
@@ -2560,25 +2555,31 @@
                 const MAINTENANCE_FROM = 6 * 60 + 30;
                 const MAINTENANCE_TO = 9 * 60 + 30;
 
-                // 卡方分布 df=8 的右尾機率, 有封閉解: P(X>x) = e^(-x/2) * Σ(j=0..3) (x/2)^j / j!
-                const pChiDf8 = (x) => {
-                    if (!(x > 0)) return 1;
-                    const h = x / 2;
-                    return Math.exp(-h) * (1 + h + h * h / 2 + h * h * h / 6);
+                // 落球熱力圖的顆粒度。跟玩家那邊的押注變化圖同一套概念: 依時間或依局數切。
+                const ballGranMode = ref(store.get('livemines_ball_gran_mode') === 'rounds' ? 'rounds' : 'time');
+                const ballGranSize = ref(parseInt(store.get('livemines_ball_gran_size')) || 60);
+                watch(ballGranMode, (v) => store.set('livemines_ball_gran_mode', v));
+                watch(ballGranSize, (v) => store.set('livemines_ball_gran_size', v));
+                const BALL_GRAN_OPTIONS = {
+                    time: [{ v: 30, t: '每 30 分' }, { v: 60, t: '每 1 小時' }, { v: 180, t: '每 3 小時' }, { v: 360, t: '每 6 小時' }, { v: 1440, t: '每 1 天' }],
+                    rounds: [{ v: 50, t: '每 50 局' }, { v: 100, t: '每 100 局' }, { v: 250, t: '每 250 局' }, { v: 500, t: '每 500 局' }]
                 };
 
-                // Benjamini-Hochberg：切成 N 個窗口各做一次檢定, 光靠機率就會有約 5% 冒出「顯著」。
-                // 沒有校正就列出可疑時段, 等於每次都在報雜訊。
-                const benjaminiHochberg = (items, alpha = 0.05) => {
-                    const sorted = [...items].sort((a, b) => a.p - b.p);
-                    const m = sorted.length;
-                    let cut = -1;
-                    sorted.forEach((x, i) => { if (x.p <= alpha * (i + 1) / m) cut = i; });
-                    return cut >= 0 ? sorted.slice(0, cut + 1) : [];
+                // 發散配色: 低於期望往藍、高於期望往紅、接近期望是白。
+                // 用 z 分數決定濃度而不是原始差值 —— 桶子大小不同時, 同樣的差距意義不一樣,
+                // z 已經把樣本數考慮進去, 所以不同顆粒度之間的顏色可以直接互相比較。
+                const divergingCell = (count, total, deff) => {
+                    if (!total) return { bg: 'rgb(30,41,59)', fg: '#64748b', z: 0 };
+                    const p = 1 / 9;
+                    const e = total * p;
+                    const sd = Math.sqrt(e * (1 - p) * (deff || 1));
+                    const z = sd > 0 ? (count - e) / sd : 0;
+                    const t = Math.min(1, Math.abs(z) / 3);        // |z|>=3 為滿色
+                    const fade = Math.round(255 * (1 - t));
+                    const bg = z >= 0 ? `rgb(255,${fade},${fade})` : `rgb(${fade},${fade},255)`;
+                    // 底色越深字要越亮, 否則深藍/深紅上的黑字看不見
+                    return { bg, fg: t > 0.55 ? '#ffffff' : '#0f172a', z };
                 };
-
-                const ballWindowSize = ref(150);
-                const BALL_WINDOW_OPTIONS = [100, 150, 200, 300];
 
                 // ===== 大盤分析 (只吃 game_results, 不與注單檔交叉) =====
                 const houseStats = computed(() => {
@@ -2777,48 +2778,53 @@
                         allCells: cellRows(balls9), allChi: chiSq(balls9)
                     };
 
-                    // --- 時段掃描: 有沒有哪一段的落球跟平常不一樣 ---
-                    // 關鍵: 期望值用「全期實際比例」而不是均勻的 1/9。
-                    // 全期本身就偏(卡方 ~79), 拿均勻當基準的話每個窗口都會顯示異常, 那只是重複告訴你「整體偏」,
-                    // 回答不了「某段時間開始不一樣」這個真正的問題。
-                    const seq = [];
+                    // --- 依顆粒度切桶, 每桶一張九宮格熱力圖 ---
+                    // 只用已套時間範圍的局(seqRounds), 所以上方篩了日期這裡就跟著變。
+                    const seqRounds = [];
                     approved.forEach(r => {
                         const b = String(r['Result']).split(',').map(x => parseInt(x)).filter(x => x >= 1 && x <= 9);
-                        if (b.length === 3) seq.push({ t: String(r['Start Time']).replace('T', ' ').slice(0, 19), b });
+                        if (b.length === 3) seqRounds.push({ wall: String(r['Start Time']).replace('T', ' ').slice(0, 19), b });
                     });
-                    const overallP = balls9.map(c => c / (seq.length * 3 || 1));
-                    const win = Math.max(50, ballWindowSize.value);
-                    const tested = [];
-                    for (let i = 0; i + win <= seq.length; i += win) { // 非重疊, 免得灌大檢定次數又互相相關
-                        const slice = seq.slice(i, i + win);
-                        const c = Array(9).fill(0);
-                        slice.forEach(x => x.b.forEach(n => c[n - 1]++));
-                        const total = c.reduce((a, b) => a + b, 0);
-                        if (total < 45) continue; // 每格期望 <5 時卡方本來就不成立
-                        const chi = c.reduce((s, o, j) => {
-                            const e = total * overallP[j];
-                            return e > 0 ? s + Math.pow(o - e, 2) / e : s;
-                        }, 0) / designEffect; // 同上: 同局三球不獨立, 不除 deff 會一直誤報
-                        tested.push({
-                            from: slice[0].t, to: slice[slice.length - 1].t,
-                            rounds: slice.length, chi, p: pChiDf8(chi),
-                            cells: c.map((v, j) => ({
-                                place: j + 1, count: v,
-                                dev: total > 0 ? (v / total - overallP[j]) * 100 : 0
-                            }))
-                        });
-                    }
-                    const flagged = benjaminiHochberg(tested).map(w => ({
-                        ...w,
-                        // 這個窗口最偏離平常的兩格, 讓人知道往哪偏
-                        top: [...w.cells].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev)).slice(0, 2)
-                    }));
-                    const ballScan = {
-                        window: win, tested: tested.length,
-                        rawHits: tested.filter(w => w.p < 0.05).length,
-                        flagged,
-                        expectPerCell: win * 3 / 9
+                    seqRounds.sort((x, y) => x.wall.localeCompare(y.wall));
+
+                    const bucketLabel = (wall, minutes) => {
+                        if (minutes >= 1440) return wall.slice(0, 10);
+                        const hh = wall.slice(11, 13), mm = wall.slice(14, 16);
+                        const slot = Math.floor((parseInt(hh) * 60 + parseInt(mm)) / minutes) * minutes;
+                        const p = (n) => String(n).padStart(2, '0');
+                        return wall.slice(5, 10) + ' ' + p(Math.floor(slot / 60)) + ':' + p(slot % 60);
                     };
+
+                    const ballBuckets = [];
+                    if (seqRounds.length) {
+                        const pushBucket = (label, list) => {
+                            const c = Array(9).fill(0);
+                            list.forEach(x => x.b.forEach(n => c[n - 1]++));
+                            const total = c.reduce((a, b) => a + b, 0);
+                            ballBuckets.push({
+                                label, rounds: list.length, total, counts: c,
+                                from: list[0].wall, to: list[list.length - 1].wall,
+                                hot: c.indexOf(Math.max(...c)) + 1,
+                                cold: c.indexOf(Math.min(...c)) + 1
+                            });
+                        };
+                        if (ballGranMode.value === 'rounds') {
+                            const n = Math.max(10, ballGranSize.value);
+                            for (let i = 0; i < seqRounds.length; i += n) {
+                                const slice = seqRounds.slice(i, i + n);
+                                pushBucket(`${i + 1}–${Math.min(i + n, seqRounds.length)} 局`, slice);
+                            }
+                        } else {
+                            const mins = Math.max(5, ballGranSize.value);
+                            let cur = [], curKey = null;
+                            seqRounds.forEach(x => {
+                                const key = bucketLabel(x.wall, mins);
+                                if (curKey !== null && key !== curKey) { pushBucket(curKey, cur); cur = []; }
+                                curKey = key; cur.push(x);
+                            });
+                            if (cur.length) pushBucket(curKey, cur);
+                        }
+                    }
 
                     // --- Jackpot: 獎池是負債, 命中與否對 PM 的意義完全不同 ---
                     const poolNow = n(byTime[byTime.length - 1]['Jackpot Pool']);
@@ -2837,7 +2843,7 @@
                             code: r['Game Code'], bet: n(r['Bet Amount']), bg: n(r['BG Win']), total: n(r['Total Win'])
                         })),
                         ggrWithoutBg: ggr + bgWin,
-                        poolNow, jpHits, ballPattern, ballScan,
+                        poolNow, jpHits, ballPattern, ballBuckets,
                         tailCurve, worstOne, worstList: worstFirst.slice(0, 5),
                         ggrDrop1: tailCurve[1] ? tailCurve[1].ggr : ggr,
                         ggrDrop10: tailCurve[10] ? tailCurve[10].ggr : ggr,
@@ -3141,7 +3147,8 @@
                 return {
                     activeTab, hasGameData, gameResultsData,
                     coverImage, coverFailed, showCover,
-                    houseStats, fmtInt, fmtHours, alignMinRounds: ALIGN_MIN_ROUNDS, ballWindowSize, ballWindowOptions: BALL_WINDOW_OPTIONS,
+                    houseStats, fmtInt, fmtHours, alignMinRounds: ALIGN_MIN_ROUNDS,
+                    ballGranMode, ballGranSize, ballGranOptions: BALL_GRAN_OPTIONS, divergingCell,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     dayCutoverHour: DAY_CUTOVER_HOUR,
