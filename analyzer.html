@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.32</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.33</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -606,6 +606,7 @@
                                         曾用名
                                         <span v-for="(part, i) in highlightParts(matchedAlias(player))" :key="i"
                                             :class="part.hit ? 'bg-yellow-400/30 text-yellow-200 rounded' : ''">{{ part.text }}</span>
+                                        <span v-if="aliasLastUsed(player)" class="text-gray-600">· 最後使用 {{ nickTime(aliasLastUsed(player)).slice(0, 10) }}</span>
                                     </div>
                                     <div class="text-[10px] text-gray-500 font-mono mt-0.5">
                                         <span v-for="(part, i) in highlightParts(player.account)" :key="i"
@@ -672,9 +673,12 @@
                         </span>
                     </h3>
                     <div class="text-xs text-gray-500 font-mono mt-1">{{ selectedPlayer.account }}</div>
-                    <div v-if="nicknamesOf(selectedPlayer).length > 1" class="text-xs text-gray-500 mt-1">
-                        此帳號記錄過 {{ nicknamesOf(selectedPlayer).length }} 個暱稱：
-                        <span class="text-gray-400">{{ nicknamesOf(selectedPlayer).join('、') }}</span>
+                    <div v-if="nicknameEntriesOf(selectedPlayer).length > 1" class="text-xs text-gray-500 mt-1">
+                        此帳號記錄過 {{ nicknameEntriesOf(selectedPlayer).length }} 個暱稱：
+                        <span v-for="(n, i) in nicknameEntriesOf(selectedPlayer)" :key="n.name" class="mr-2">
+                            <span :class="i === 0 ? 'text-indigo-300 font-bold' : 'text-gray-400'">{{ n.name }}</span>
+                            <span v-if="n.last" class="text-gray-600">({{ nickTime(n.last).slice(0, 10) }})</span>
+                        </span>
                     </div>
                 </div>
                 <div class="p-6 flex flex-col lg:flex-row gap-6 items-start">
@@ -1932,14 +1936,25 @@
 
                 // 暱稱對照檔 (nicknames.json) 的 key 是 Agent + Account, 例如 "TGB25" + 32 碼帳號。
                 // 值是陣列 —— 改過名的帳號會留下多個。整組留著, 搜尋要能用舊名字找到人。
+                //
+                // v2 起每筆是 { name, last }, last 是最後使用時間(Unix 秒)。有了它就能明確判斷
+                // 哪個是現用名, 不必再靠陣列順序猜。仍相容 v1 的純字串格式(那時只能用順序)。
                 const parseNicknameFile = (text) => {
                     const json = JSON.parse(text);
                     const users = json && json.users ? json.users : json;
                     const map = {};
                     for (const key in users) {
                         const v = users[key];
-                        const names = (Array.isArray(v) ? v : [v]).filter(Boolean).map(String);
-                        if (names.length) map[key] = names;
+                        const list = (Array.isArray(v) ? v : [v])
+                            .map(x => (x && typeof x === 'object')
+                                ? { name: String(x.name == null ? '' : x.name), last: typeof x.last === 'number' ? x.last : null }
+                                : { name: String(x == null ? '' : x), last: null })
+                            .filter(x => x.name);
+                        // 自己排一次, 不依賴檔案本身的順序 —— 沒有時間戳的(v1)維持原順序
+                        if (list.some(x => x.last !== null)) {
+                            list.sort((a, b) => (b.last || 0) - (a.last || 0));
+                        }
+                        if (list.length) map[key] = list;
                     }
                     return map;
                 };
@@ -2863,16 +2878,26 @@
                     return Object.values(playersMap.value).filter(p => nicknameMap.value[(p.agent || '') + p.account]).length;
                 });
 
-                // 該帳號記錄過的所有暱稱; 沒有就回空陣列
-                const nicknamesOf = (player) => {
+                // 該帳號記錄過的所有暱稱, 已依最後使用時間由新到舊排序; 每筆是 { name, last }
+                const nicknameEntriesOf = (player) => {
                     if (!player) return [];
                     return nicknameMap.value[(player.agent || '') + player.account] || [];
                 };
+                // 只要名字的版本 —— 搜尋與既有介面用
+                const nicknamesOf = (player) => nicknameEntriesOf(player).map(x => x.name);
 
-                // 對照檔沒有時間戳, 無從得知哪個是現用名。觀察到的排序看起來是新的在前
-                // (例如 Magneto17 / Depositor16 / Kinsenas15 編號遞減), 所以取第一個當顯示名,
-                // 但不對外宣稱它「就是現用名」—— 其餘的一律保留, 搜尋與 tooltip 都吃得到。
+                // 排序後的第一個就是現用名(v2 有 last 時間戳可依據)
                 const nicknameOf = (player) => nicknamesOf(player)[0] || null;
+
+                const nickTime = (ts) => {
+                    if (!ts) return '';
+                    const d = new Date(ts * 1000), p = (n) => String(n).padStart(2, '0');
+                    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+                };
+                // 給 tooltip 用: 每個名字配上最後使用時間
+                const nicknameHistory = (player) => nicknameEntriesOf(player)
+                    .map((x, i) => `${i === 0 ? '現用' : '曾用'}　${x.name}${x.last ? '　(最後使用 ' + nickTime(x.last) + ')' : ''}`)
+                    .join('\n');
 
                 // 沒有暱稱時給一個固定的佔位字, 而不是把帳號塞進暱稱的位置 ——
                 // 帳號長度和字體都跟暱稱差很多, 混在同一個欄位會讓整排對不齊。
@@ -2888,6 +2913,14 @@
                     if (!names.length) return null;
                     if (names[0].toLowerCase().includes(q)) return null; // 主要顯示名已經命中
                     return names.slice(1).find(nm => nm.toLowerCase().includes(q)) || null;
+                };
+
+                // 命中的舊名是什麼時候最後被使用的 —— 讓人知道那是多久以前的事
+                const aliasLastUsed = (player) => {
+                    const alias = matchedAlias(player);
+                    if (!alias) return null;
+                    const hit = nicknameEntriesOf(player).find(x => x.name === alias);
+                    return hit ? hit.last : null;
                 };
 
                 // 點上方的分群卡片就只看那一群; null = 全部
@@ -3118,7 +3151,7 @@
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
-                    nicknameOf, nicknamesOf, displayName, nicknameCount, nicknameMap, playersMap, physicalGames,
+                    nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, nicknameCount, nicknameMap, playersMap, physicalGames,
                     matchedAlias, placePreference,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
