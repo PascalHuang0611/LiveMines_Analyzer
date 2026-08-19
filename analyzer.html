@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.31</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.32</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -2572,8 +2572,9 @@
                     const n = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
 
                     // 未結算的局金額全為 0, 混進來只會稀釋每局平均。同時套用時間範圍。
-                    const approved = raw.filter(r => r['Game Status'] === 'Approved'
-                        && (rangeIsFull.value || inRange(wallClock(r['Start Time']))));
+                    // 先套時間範圍, 再依狀態拆 —— 順序反過來的話, 範圍外的局會被誤算成「未結算」
+                    const inScope = raw.filter(r => rangeIsFull.value || inRange(wallClock(r['Start Time'])));
+                    const approved = inScope.filter(r => r['Game Status'] === 'Approved');
                     // 再排掉「開了但沒人下注」的空局 —— 它們不是營運結果, 只會拉低每局均值
                     const active = approved.filter(r => n(r['Bet Amount']) > 0);
                     if (!active.length) return null;
@@ -2813,7 +2814,7 @@
                     return {
                         bet, payout, ggr, rtp: finalRtp, hold: bet > 0 ? ggr / bet * 100 : 0,
                         rounds: active.length, emptyRounds: approved.length - active.length,
-                        pending: raw.length - approved.length,
+                        pending: inScope.length - approved.length,
                         spanHours,
                         mgWin, bgWin,
                         bgRounds: bgRounds.length,
