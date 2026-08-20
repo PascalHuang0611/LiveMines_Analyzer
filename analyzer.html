@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.40</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.42</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1114,359 +1114,403 @@
             </div>
 
             <template v-else>
-                <!-- ===== A. 這期賺不賺錢 ===== -->
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-xl font-bold text-white mb-1">營收表現</h3>
-                    <p class="text-sm text-gray-400 mb-5">
-                        {{ houseStats.rounds.toLocaleString() }} 局有效局，涵蓋 {{ houseStats.spanHours.toFixed(1) }} 小時
-                        <span v-if="houseStats.emptyRounds" class="text-gray-500">（另有 {{ houseStats.emptyRounds }} 局無人下注、{{ houseStats.pending }} 局未結算，未列入計算）</span>
-                    </p>
+                <!-- 區塊順序可拖曳調整, 抓左上角的握把。順序記在 localStorage。 -->
+                <div v-for="(sec, idx) in houseSections" :key="sec.id"
+                    class="relative transition-all"
+                    :class="[
+                        houseDragIndex === idx ? 'opacity-40' : '',
+                        houseDragOver === idx && houseDragIndex !== idx ? 'ring-2 ring-indigo-400 rounded-2xl' : ''
+                    ]"
+                    @dragover.prevent="houseDragOver = idx"
+                    @drop.prevent="dropHouseSection(idx)"
+                    @dragleave="houseDragOver === idx ? houseDragOver = null : null">
 
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
-                            <div class="text-xs text-gray-500 mb-1">總投注</div>
-                            <div class="text-2xl font-bold text-white">{{ fmtInt(houseStats.bet) }}</div>
-                        </div>
-                        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
-                            <div class="text-xs text-gray-500 mb-1">總派彩</div>
-                            <div class="text-2xl font-bold text-gray-300">{{ fmtInt(houseStats.payout) }}</div>
-                        </div>
-                        <div class="bg-slate-800/50 rounded-xl p-4 border border-indigo-500/30">
-                            <div class="text-xs text-gray-500 mb-1">毛利 (GGR)</div>
-                            <div class="text-2xl font-bold" :class="houseStats.ggr >= 0 ? 'text-green-400' : 'text-red-400'">
-                                {{ fmtInt(houseStats.ggr) }}
-                            </div>
-                        </div>
-                        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5 cursor-help"
-                            :title="`RTP = 總派彩 / 總投注\nhold = 平台實際留成比例`">
-                            <div class="text-xs text-gray-500 mb-1">RTP ／ hold</div>
-                            <div class="text-2xl font-bold text-yellow-400">{{ houseStats.rtp.toFixed(2) }}%</div>
-                            <div class="text-xs text-gray-400">留成 {{ houseStats.hold.toFixed(2) }}%</div>
-                        </div>
+                    <div class="absolute -top-1 left-3 z-20 flex items-center gap-1">
+                        <span draggable="true" @dragstart="startHouseDrag(idx, $event)" @dragend="endHouseDrag"
+                            class="cursor-grab active:cursor-grabbing select-none px-2 py-0.5 rounded-b bg-slate-700/80 hover:bg-indigo-600 text-gray-300 hover:text-white text-[10px] border border-white/10 border-t-0 transition-colors"
+                            title="拖曳調整區塊順序">⋮⋮ 拖曳</span>
+                        <button v-if="idx > 0" @click="moveHouseSection(idx, -1)"
+                            class="px-1.5 py-0.5 rounded-b bg-slate-700/80 hover:bg-white/20 text-gray-300 text-[10px] border border-white/10 border-t-0"
+                            title="上移">▲</button>
+                        <button v-if="idx < houseSections.length - 1" @click="moveHouseSection(idx, 1)"
+                            class="px-1.5 py-0.5 rounded-b bg-slate-700/80 hover:bg-white/20 text-gray-300 text-[10px] border border-white/10 border-t-0"
+                            title="下移">▼</button>
                     </div>
 
-                    <!-- 可信度警語: 毛利可能是負的, 兩種情境的講法完全不同 -->
-                    <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-6">
-                        <div class="text-amber-300 font-bold text-sm mb-2">這個毛利有多脆弱？</div>
-                        <p v-if="houseStats.ggr > 0 && houseStats.ggrDrop1 > 0" class="text-sm text-gray-300 leading-relaxed">
-                            只要拿掉最賠的 <span class="font-bold text-white">1 局</span>，毛利就從
-                            <span class="font-bold text-white">{{ fmtInt(houseStats.ggr) }}</span> 變成
-                            <span class="font-bold text-amber-300">{{ fmtInt(houseStats.ggrDrop1) }}</span>。
-                            換句話說，本期有
-                            <span class="font-bold text-amber-300">{{ ((1 - houseStats.ggr / houseStats.ggrDrop1) * 100).toFixed(0) }}%</span>
-                            的潛在毛利是被單獨一局吃掉的。
+                    <template v-if="sec.id === 'revenue'">
+                    <!-- ===== A. 這期賺不賺錢 ===== -->
+                    <div class="glass rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-1">營收表現</h3>
+                        <p class="text-sm text-gray-400 mb-5">
+                            {{ houseStats.rounds.toLocaleString() }} 局有效局，涵蓋 {{ houseStats.spanHours.toFixed(1) }} 小時
+                            <span v-if="houseStats.emptyRounds" class="text-gray-500">（另有 {{ houseStats.emptyRounds }} 局無人下注、{{ houseStats.pending }} 局未結算，未列入計算）</span>
                         </p>
-                        <p v-else-if="houseStats.ggrDrop1 > 0" class="text-sm text-gray-300 leading-relaxed">
-                            本期整體是<span class="font-bold text-red-400">虧損 {{ fmtInt(-houseStats.ggr) }}</span>，
-                            但拿掉最賠的 <span class="font-bold text-white">1 局</span>之後就轉為
-                            <span class="font-bold text-green-400">獲利 {{ fmtInt(houseStats.ggrDrop1) }}</span>
-                            —— 整期的虧損完全來自這一局。
-                        </p>
-                        <p v-else class="text-sm text-gray-300 leading-relaxed">
-                            本期整體是<span class="font-bold text-red-400">虧損 {{ fmtInt(-houseStats.ggr) }}</span>，
-                            即使拿掉最賠的 1 局仍虧
-                            <span class="font-bold text-red-400">{{ fmtInt(-houseStats.ggrDrop1) }}</span>、
-                            拿掉最賠的 10 局仍虧
-                            <span class="font-bold text-red-400">{{ fmtInt(-houseStats.ggrDrop10) }}</span>。
-                            這不是單一事件造成的，是整體結果偏離。
-                        </p>
-                        <p class="text-xs text-gray-500 mt-2">
-                            最賠的一局：{{ houseStats.worstOne.code }}（{{ houseStats.worstOne.time }}），投注
-                            {{ fmtInt(houseStats.worstOne.bet) }} 賠出 {{ fmtInt(houseStats.worstOne.payout) }}，淨損
-                            {{ fmtInt(-houseStats.worstOne.ggr) }}
-                        </p>
-                    </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                            <h4 class="text-sm font-bold text-gray-300 mb-1">毛利有多集中在少數幾局</h4>
-                            <p class="text-xs text-gray-500 mb-3">橫軸：拿掉最賠的前 N 局。線爬得越陡，代表損益越被少數幾局綁架。</p>
-                            <div class="h-64"><canvas id="houseTailChart"></canvas></div>
-                        </div>
-                        <div>
-                            <h4 class="text-sm font-bold text-gray-300 mb-1">這個 RTP 要跑多久才穩定</h4>
-                            <p class="text-xs text-gray-500 mb-3">
-                                第 {{ houseStats.midPoint.i.toLocaleString() }} 局時累積 RTP 是
-                                <span class="font-bold" :class="houseStats.midPoint.ggr < 0 ? 'text-red-400' : 'text-green-400'">{{ houseStats.midPoint.rtp.toFixed(2) }}%</span>
-                                （累積毛利 {{ fmtInt(houseStats.midPoint.ggr) }}）
-                                <span v-if="houseStats.settleAt">，要到第 {{ houseStats.settleAt.toLocaleString() }} 局才穩定在最終值 ±1pp 內</span>。
-                            </p>
-                            <div class="h-64"><canvas id="houseRtpChart"></canvas></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ===== C. 遊戲功能的成本 ===== -->
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-xl font-bold text-white mb-1">功能成本</h3>
-                    <p class="text-sm text-gray-400 mb-5">哪些機制在吃毛利，以及還有多少錢掛在帳上沒發出去。</p>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
-                            <div class="flex items-baseline justify-between mb-3">
-                                <span class="font-bold text-white">BG（獎勵遊戲）</span>
-                                <span class="text-xs text-gray-400">{{ houseStats.bgRounds }} / {{ houseStats.rounds.toLocaleString() }} 局觸發（{{ (houseStats.bgRounds / houseStats.rounds * 100).toFixed(2) }}%）</span>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                                <div class="text-xs text-gray-500 mb-1">總投注</div>
+                                <div class="text-2xl font-bold text-white">{{ fmtInt(houseStats.bet) }}</div>
                             </div>
-                            <p class="text-sm text-gray-300 leading-relaxed">
-                                BG 只在 <span class="font-bold text-white">{{ (houseStats.bgRounds / houseStats.rounds * 100).toFixed(2) }}%</span> 的局觸發，
-                                卻讓毛利從 <span class="font-bold text-gray-400">{{ fmtInt(houseStats.ggrWithoutBg) }}</span>
-                                掉到 <span class="font-bold text-white">{{ fmtInt(houseStats.ggr) }}</span><span v-if="houseStats.ggrWithoutBg > 0">
-                                    —
-                                    <span class="font-bold text-red-400">吃掉 {{ (houseStats.bgWin / houseStats.ggrWithoutBg * 100).toFixed(0) }}%</span></span>。
-                            </p>
-                            <p class="text-xs text-gray-500 mt-2">觸發率是少數幾個能直接調的旋鈕之一，調動 0.5% 就是六位數的毛利差異。</p>
-                            <table class="w-full text-xs mt-4">
-                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
-                                    <th class="py-1">單筆最大 BG</th><th class="py-1 text-right">投注</th><th class="py-1 text-right">BG 派彩</th>
-                                </tr></thead>
-                                <tbody>
-                                    <tr v-for="b in houseStats.bgTopRounds" :key="b.code" class="border-b border-white/5">
-                                        <td class="py-1 text-gray-400">{{ b.code }}</td>
-                                        <td class="py-1 text-right text-gray-400">{{ fmtInt(b.bet) }}</td>
-                                        <td class="py-1 text-right font-bold text-red-400">{{ fmtInt(b.bg) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                                <div class="text-xs text-gray-500 mb-1">總派彩</div>
+                                <div class="text-2xl font-bold text-gray-300">{{ fmtInt(houseStats.payout) }}</div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-indigo-500/30">
+                                <div class="text-xs text-gray-500 mb-1">毛利 (GGR)</div>
+                                <div class="text-2xl font-bold" :class="houseStats.ggr >= 0 ? 'text-green-400' : 'text-red-400'">
+                                    {{ fmtInt(houseStats.ggr) }}
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5 cursor-help"
+                                :title="`RTP = 總派彩 / 總投注\nhold = 平台實際留成比例`">
+                                <div class="text-xs text-gray-500 mb-1">RTP ／ hold</div>
+                                <div class="text-2xl font-bold text-yellow-400">{{ houseStats.rtp.toFixed(2) }}%</div>
+                                <div class="text-xs text-gray-400">留成 {{ houseStats.hold.toFixed(2) }}%</div>
+                            </div>
                         </div>
 
-                        <div class="bg-slate-800/50 rounded-xl p-5 border" :class="houseStats.jpHits === 0 ? 'border-amber-500/40' : 'border-white/5'">
-                            <div class="flex items-baseline justify-between mb-3">
-                                <span class="font-bold text-white">Jackpot（累積獎池）</span>
-                                <span class="text-xs" :class="houseStats.jpHits === 0 ? 'text-amber-400' : 'text-gray-400'">
-                                    觀測期內命中 {{ houseStats.jpHits }} 次
-                                </span>
-                            </div>
-                            <div class="text-3xl font-bold text-amber-300 mb-1">{{ fmtInt(houseStats.poolNow) }}</div>
-                            <div class="text-xs text-gray-500 mb-3">期末獎池餘額</div>
-                            <p v-if="houseStats.jpHits === 0" class="text-sm text-gray-300 leading-relaxed">
-                                <template v-if="houseStats.ggr > 0">
-                                    獎池已累積到期間毛利的
-                                    <span class="font-bold text-amber-300">{{ (houseStats.poolNow / houseStats.ggr).toFixed(2) }} 倍</span>，
-                                    而
-                                </template>
-                                <template v-else>獎池持續累積，而</template>
-                                觀測期內一次都沒有開出。這是一筆掛在帳上、隨時會兌現的負債，
-                                不是已實現的收益。
+                        <!-- 可信度警語: 毛利可能是負的, 兩種情境的講法完全不同 -->
+                        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-6">
+                            <div class="text-amber-300 font-bold text-sm mb-2">這個毛利有多脆弱？</div>
+                            <p v-if="houseStats.ggr > 0 && houseStats.ggrDrop1 > 0" class="text-sm text-gray-300 leading-relaxed">
+                                只要拿掉最賠的 <span class="font-bold text-white">1 局</span>，毛利就從
+                                <span class="font-bold text-white">{{ fmtInt(houseStats.ggr) }}</span> 變成
+                                <span class="font-bold text-amber-300">{{ fmtInt(houseStats.ggrDrop1) }}</span>。
+                                換句話說，本期有
+                                <span class="font-bold text-amber-300">{{ ((1 - houseStats.ggr / houseStats.ggrDrop1) * 100).toFixed(0) }}%</span>
+                                的潛在毛利是被單獨一局吃掉的。
                             </p>
-                            <p v-else class="text-sm text-gray-300">觀測期內命中 {{ houseStats.jpHits }} 次。</p>
+                            <p v-else-if="houseStats.ggrDrop1 > 0" class="text-sm text-gray-300 leading-relaxed">
+                                本期整體是<span class="font-bold text-red-400">虧損 {{ fmtInt(-houseStats.ggr) }}</span>，
+                                但拿掉最賠的 <span class="font-bold text-white">1 局</span>之後就轉為
+                                <span class="font-bold text-green-400">獲利 {{ fmtInt(houseStats.ggrDrop1) }}</span>
+                                —— 整期的虧損完全來自這一局。
+                            </p>
+                            <p v-else class="text-sm text-gray-300 leading-relaxed">
+                                本期整體是<span class="font-bold text-red-400">虧損 {{ fmtInt(-houseStats.ggr) }}</span>，
+                                即使拿掉最賠的 1 局仍虧
+                                <span class="font-bold text-red-400">{{ fmtInt(-houseStats.ggrDrop1) }}</span>、
+                                拿掉最賠的 10 局仍虧
+                                <span class="font-bold text-red-400">{{ fmtInt(-houseStats.ggrDrop10) }}</span>。
+                                這不是單一事件造成的，是整體結果偏離。
+                            </p>
                             <p class="text-xs text-gray-500 mt-2">
-                                建議跟開發確認提撥來源：獎池成長率不是固定值，可能有其他房間一起貢獻。
+                                最賠的一局：{{ houseStats.worstOne.code }}（{{ houseStats.worstOne.time }}），投注
+                                {{ fmtInt(houseStats.worstOne.bet) }} 賠出 {{ fmtInt(houseStats.worstOne.payout) }}，淨損
+                                {{ fmtInt(-houseStats.worstOne.ggr) }}
                             </p>
                         </div>
-                    </div>
-                </div>
 
-                <!-- ===== C. 落球分析 ===== -->
-                <div class="glass rounded-2xl p-6" v-if="houseStats.ballPattern.rounds">
-                    <h3 class="text-xl font-bold text-white mb-1">落球分析</h3>
-                    <p class="text-sm text-gray-400 mb-5">
-                        每局開 3 顆球。球型比例對照<span class="text-gray-300">上線前訂好的設計值</span>。
-                    </p>
-
-                    <!-- 球型分布 -->
-                    <div class="mb-6">
-                        <h4 class="text-sm font-bold text-gray-300 mb-3">球型分布（{{ houseStats.ballPattern.rounds.toLocaleString() }} 局）</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div v-for="p in [
-                                    { key: '三球皆不同', d: houseStats.ballPattern.distinct },
-                                    { key: '雙同球', d: houseStats.ballPattern.pair },
-                                    { key: '三同球', d: houseStats.ballPattern.triple }
-                                ]" :key="p.key"
-                                class="bg-slate-800/50 rounded-xl p-4 border cursor-help"
-                                :class="Math.abs(p.d.z) >= 3 ? 'border-amber-500/40' : 'border-white/5'"
-                                :title="`實際 ${p.d.count.toLocaleString()} 局（${p.d.pct.toFixed(2)}%）
-設計值 ${p.d.specPct.toFixed(2)}%
-差 ${p.d.diff >= 0 ? '+' : ''}${p.d.diff.toFixed(2)}pp，約 ${Math.abs(p.d.z).toFixed(1)} 個標準誤`">
-                                <div class="text-xs text-gray-500 mb-1">{{ p.key }}</div>
-                                <div class="flex items-baseline gap-2">
-                                    <span class="text-2xl font-bold text-white">{{ p.d.pct.toFixed(2) }}%</span>
-                                    <span class="text-xs text-gray-500">設計 {{ p.d.specPct.toFixed(2) }}%</span>
-                                </div>
-                                <div class="text-xs mt-1" :class="Math.abs(p.d.z) >= 3 ? 'text-amber-400' : (Math.abs(p.d.z) >= 2 ? 'text-gray-400' : 'text-green-400')">
-                                    {{ p.d.diff >= 0 ? '+' : '' }}{{ p.d.diff.toFixed(2) }}pp
-                                    <span class="text-gray-600">· {{ p.d.count.toLocaleString() }} 局</span>
-                                    <span v-if="Math.abs(p.d.z) < 2" class="text-green-400">· 符合設計</span>
-                                </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="text-sm font-bold text-gray-300 mb-1">毛利有多集中在少數幾局</h4>
+                                <p class="text-xs text-gray-500 mb-3">橫軸：拿掉最賠的前 N 局。線爬得越陡，代表損益越被少數幾局綁架。</p>
+                                <div class="h-64"><canvas id="houseTailChart"></canvas></div>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-gray-300 mb-1">這個 RTP 要跑多久才穩定</h4>
+                                <p class="text-xs text-gray-500 mb-3">
+                                    第 {{ houseStats.midPoint.i.toLocaleString() }} 局時累積 RTP 是
+                                    <span class="font-bold" :class="houseStats.midPoint.ggr < 0 ? 'text-red-400' : 'text-green-400'">{{ houseStats.midPoint.rtp.toFixed(2) }}%</span>
+                                    （累積毛利 {{ fmtInt(houseStats.midPoint.ggr) }}）
+                                    <span v-if="houseStats.settleAt">，要到第 {{ houseStats.settleAt.toLocaleString() }} 局才穩定在最終值 ±1pp 內</span>。
+                                </p>
+                                <div class="h-64"><canvas id="houseRtpChart"></canvas></div>
                             </div>
                         </div>
-                        <p class="text-[11px] text-gray-500 mt-3 leading-relaxed">
-                            「三球皆不同」與「雙同球」是互補的，兩者的偏差必然大小相同、方向相反，算同一個偏離而非兩個獨立證據。
-                            以目前 {{ houseStats.ballPattern.rounds.toLocaleString() }} 局計，單一比例的標準誤約
-                            {{ (Math.sqrt(0.25 / houseStats.ballPattern.rounds) * 100).toFixed(2) }}pp。
+                    </div>
+                    </template>
+
+                    <template v-if="sec.id === 'cost'">
+                    <!-- ===== B. 遊戲功能的成本 ===== -->
+                    <div class="glass rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-1">功能成本</h3>
+                        <p class="text-sm text-gray-400 mb-5">哪些機制在吃毛利，以及還有多少錢掛在帳上沒發出去。</p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
+                                <div class="flex items-baseline justify-between mb-3">
+                                    <span class="font-bold text-white">BG（獎勵遊戲）</span>
+                                    <span class="text-xs text-gray-400">{{ houseStats.bgRounds }} / {{ houseStats.rounds.toLocaleString() }} 局觸發（{{ (houseStats.bgRounds / houseStats.rounds * 100).toFixed(2) }}%）</span>
+                                </div>
+                                <p class="text-sm text-gray-300 leading-relaxed">
+                                    BG 只在 <span class="font-bold text-white">{{ (houseStats.bgRounds / houseStats.rounds * 100).toFixed(2) }}%</span> 的局觸發，
+                                    卻讓毛利從 <span class="font-bold text-gray-400">{{ fmtInt(houseStats.ggrWithoutBg) }}</span>
+                                    掉到 <span class="font-bold text-white">{{ fmtInt(houseStats.ggr) }}</span><span v-if="houseStats.ggrWithoutBg > 0">
+                                        —
+                                        <span class="font-bold text-red-400">吃掉 {{ (houseStats.bgWin / houseStats.ggrWithoutBg * 100).toFixed(0) }}%</span></span>。
+                                </p>
+                                <p class="text-xs text-gray-500 mt-2">觸發率是少數幾個能直接調的旋鈕之一，調動 0.5% 就是六位數的毛利差異。</p>
+                                <table class="w-full text-xs mt-4">
+                                    <thead><tr class="text-gray-500 text-left border-b border-white/5">
+                                        <th class="py-1">單筆最大 BG</th><th class="py-1 text-right">投注</th><th class="py-1 text-right">BG 派彩</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        <tr v-for="b in houseStats.bgTopRounds" :key="b.code" class="border-b border-white/5">
+                                            <td class="py-1 text-gray-400">{{ b.code }}</td>
+                                            <td class="py-1 text-right text-gray-400">{{ fmtInt(b.bet) }}</td>
+                                            <td class="py-1 text-right font-bold text-red-400">{{ fmtInt(b.bg) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="bg-slate-800/50 rounded-xl p-5 border" :class="houseStats.jpHits === 0 ? 'border-amber-500/40' : 'border-white/5'">
+                                <div class="flex items-baseline justify-between mb-3">
+                                    <span class="font-bold text-white">Jackpot（累積獎池）</span>
+                                    <span class="text-xs" :class="houseStats.jpHits === 0 ? 'text-amber-400' : 'text-gray-400'">
+                                        觀測期內命中 {{ houseStats.jpHits }} 次
+                                    </span>
+                                </div>
+                                <div class="text-3xl font-bold text-amber-300 mb-1">{{ fmtInt(houseStats.poolNow) }}</div>
+                                <div class="text-xs text-gray-500 mb-3">期末獎池餘額</div>
+                                <p v-if="houseStats.jpHits === 0" class="text-sm text-gray-300 leading-relaxed">
+                                    <template v-if="houseStats.ggr > 0">
+                                        獎池已累積到期間毛利的
+                                        <span class="font-bold text-amber-300">{{ (houseStats.poolNow / houseStats.ggr).toFixed(2) }} 倍</span>，
+                                        而
+                                    </template>
+                                    <template v-else>獎池持續累積，而</template>
+                                    觀測期內一次都沒有開出。這是一筆掛在帳上、隨時會兌現的負債，
+                                    不是已實現的收益。
+                                </p>
+                                <p v-else class="text-sm text-gray-300">觀測期內命中 {{ houseStats.jpHits }} 次。</p>
+                                <p class="text-xs text-gray-500 mt-2">
+                                    建議跟開發確認提撥來源：獎池成長率不是固定值，可能有其他房間一起貢獻。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    </template>
+
+                    <template v-if="sec.id === 'ball'">
+                    <!-- ===== C. 落球分析 ===== -->
+                    <div class="glass rounded-2xl p-6" v-if="houseStats.ballPattern.rounds">
+                        <h3 class="text-xl font-bold text-white mb-1">落球型態</h3>
+                        <p class="text-sm text-gray-400 mb-5">
+                            每局開 3 顆球。球型比例對照<span class="text-gray-300">上線前訂好的設計值</span>。
                         </p>
-                    </div>
 
-                    <!-- 落點對照 -->
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div v-for="t in [
-                                { key: '雙同球落在哪一格', rows: houseStats.ballPattern.pairCells, chi: houseStats.ballPattern.pairChi, hue: 'rgba(99,102,241,' },
-                                { key: '三同球落在哪一格', rows: houseStats.ballPattern.tripleCells, chi: houseStats.ballPattern.tripleChi, hue: 'rgba(251,191,36,' },
-                                { key: '全部球的落點（對照）', rows: houseStats.ballPattern.allCells, chi: houseStats.ballPattern.allChi, hue: 'rgba(52,211,153,' }
-                            ]" :key="t.key">
-                            <div class="flex items-baseline justify-between mb-2">
-                                <h4 class="text-sm font-bold text-gray-300">{{ t.key }}</h4>
-                                <span class="text-[10px] cursor-help"
-                                    :class="t.chi > 15.51 ? 'text-amber-400' : 'text-gray-500'"
-                                    :title="`卡方檢定 (df=8)，5% 臨界值 15.51。\n已除以 design effect ${houseStats.ballPattern.deff.toFixed(3)} —— 同一局的 3 顆球不是 3 個獨立觀測，不校正會高估顯著性。`">
-                                    卡方 {{ t.chi.toFixed(1) }}{{ t.chi > 15.51 ? ' ⚠' : '' }}
-                                </span>
-                            </div>
-                            <table class="w-full text-xs">
-                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
-                                    <th class="py-1">格</th><th class="py-1 text-right">次數</th>
-                                    <th class="py-1 text-right">占比</th><th class="py-1 text-right">z</th>
-                                </tr></thead>
-                                <tbody>
-                                    <tr v-for="c in t.rows" :key="c.place" class="border-b border-white/5">
-                                        <td class="py-1">
-                                            <span class="inline-block w-5 text-center rounded text-white"
-                                                :style="{ backgroundColor: t.hue + Math.min(0.75, Math.abs(c.z) / 4 * 0.7 + 0.08).toFixed(2) + ')' }">{{ c.place }}</span>
-                                        </td>
-                                        <td class="py-1 text-right text-gray-400">{{ c.count.toLocaleString() }}</td>
-                                        <td class="py-1 text-right text-gray-300">{{ c.pct.toFixed(2) }}%</td>
-                                        <td class="py-1 text-right font-bold"
-                                            :class="c.strong ? (c.z > 0 ? 'text-amber-400' : 'text-sky-400')
-                                                : (Math.abs(c.z) >= 2 ? (c.z > 0 ? 'text-amber-400/50' : 'text-sky-400/50') : 'text-gray-600')"
-                                            :title="c.strong ? '通過 9 格同時檢定的 Bonferroni 門檻 (|z|>2.77)'
-                                                : (Math.abs(c.z) >= 2 ? '單看是偏離，但九格一起檢定時撐不過門檻' : '')">
-                                            {{ c.z > 0 ? '+' : '' }}{{ c.z.toFixed(2) }}{{ c.strong ? ' ●' : '' }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <p v-if="t.key.indexOf('三同') === 0 && houseStats.ballPattern.triple.count < 200" class="text-[10px] text-gray-500 mt-2">
-                                僅 {{ houseStats.ballPattern.triple.count }} 局，每格期望不到 {{ Math.ceil(houseStats.ballPattern.triple.count / 9) }} 次，卡方在此樣本下不可靠，僅供觀察。
-                            </p>
-                        </div>
-                    </div>
-
-                    <p class="text-xs text-gray-500 mt-4 leading-relaxed">
-                        <span class="text-gray-400">● 標記</span>代表該格通過九格同時檢定的門檻（|z| &gt; 2.77）；
-                        只有 |z| ≥ 2 的以淡色呈現 —— 九格一起看時，光是 2 個標準差還撐不住。
-                        所有卡方與 z 都已除以 design effect
-                        <span class="text-gray-400">{{ houseStats.ballPattern.deff.toFixed(3) }}</span>
-                        （同一局的 3 顆球會互相牽動，不是 3 個獨立觀測）。
-                        <br>
-                        內部對照：雙同球局裡「落單那一顆」的落點卡方為
-                        <span class="font-bold text-gray-400">{{ houseStats.ballPattern.oddChi.toFixed(1) }}</span>。
-                        若它接近均勻而重複的那顆明顯偏斜，代表偏誤集中在「重複」這件事上，而不是整體落球都偏。
-                    </p>
-
-                    <!-- 分時落球熱力圖 -->
-                    <div v-if="houseStats.ballBuckets.length" class="mt-6 pt-5 border-t border-white/10">
-                        <div class="flex flex-wrap items-center gap-3 mb-3">
-                            <h4 class="text-sm font-bold text-gray-300">落球熱力圖</h4>
-                            <div class="flex rounded-lg overflow-hidden border border-white/10">
-                                <button @click="ballGranMode = 'time'; ballGranSize = 60"
-                                    class="px-3 py-1 text-xs transition-colors"
-                                    :class="ballGranMode === 'time' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依時間</button>
-                                <button @click="ballGranMode = 'rounds'; ballGranSize = 100"
-                                    class="px-3 py-1 text-xs transition-colors"
-                                    :class="ballGranMode === 'rounds' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依局數</button>
-                            </div>
-                            <div class="flex gap-1">
-                                <button v-for="o in ballGranOptions[ballGranMode]" :key="o.v" @click="ballGranSize = o.v"
-                                    class="px-2.5 py-1 rounded text-xs transition-colors border"
-                                    :class="ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5'">
-                                    {{ o.t }}
-                                </button>
-                            </div>
-                            <button @click="showHeatmapModal = true"
-                                class="ml-auto px-2.5 py-1 rounded text-xs font-bold transition-colors border text-gray-300 border-white/15 hover:bg-white/10"
-                                title="開啟放大檢視，一次看到所有區間">
-                                放大檢視
-                            </button>
-                            <button @click="exportBallHeatmapPng"
-                                class="px-2.5 py-1 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
-                                :title="`把目前的 ${houseStats.ballBuckets.length} 個區間匯出成 PNG，樣式與畫面相同`">
-                                匯出 PNG
-                            </button>
-                            <div class="flex items-center gap-2 text-[10px] text-gray-400">
-                                <span>偏冷</span>
-                                <span class="inline-block w-24 h-3 rounded border border-white/10"
-                                    style="background:linear-gradient(to right, rgb(0,0,255), rgb(255,255,255), rgb(255,0,0))"></span>
-                                <span>偏熱</span>
-                            </div>
-                        </div>
-                        <p class="text-[11px] text-gray-500 mb-3">
-                            每張九宮格是一個區間，格內數字是該格開出的球數。顏色代表與該區間平均的差距
-                            （以標準差衡量，|z| ≥ 3 為滿色），所以不同大小的區間之間可以直接比較。
-                            共 {{ houseStats.ballBuckets.length }} 個區間。
-                        </p>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 max-h-[560px] overflow-y-auto pr-1">
-                            <div v-for="(b, i) in houseStats.ballBuckets" :key="i"
-                                class="bg-slate-800/40 rounded-lg p-2 border border-white/5">
-                                <div class="flex items-baseline justify-between mb-1.5">
-                                    <span class="text-[11px] font-bold text-gray-300 truncate" :title="b.from + ' ~ ' + b.to">{{ b.label }}</span>
-                                    <span class="text-[9px] text-gray-500 shrink-0 ml-1">{{ b.rounds }} 局</span>
-                                </div>
-                                <div class="grid grid-cols-3 gap-px bg-black/40 rounded overflow-hidden">
-                                    <div v-for="g in 9" :key="g"
-                                        class="aspect-square flex items-center justify-center text-[11px] font-bold cursor-help"
-                                        :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
-                                                  color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
-                                        :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
-                                        {{ b.counts[g-1] }}
+                        <!-- 球型分布 -->
+                        <div class="mb-6">
+                            <h4 class="text-sm font-bold text-gray-300 mb-3">球型分布（{{ houseStats.ballPattern.rounds.toLocaleString() }} 局）</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div v-for="p in [
+                                        { key: '三球皆不同', d: houseStats.ballPattern.distinct },
+                                        { key: '雙同球', d: houseStats.ballPattern.pair },
+                                        { key: '三同球', d: houseStats.ballPattern.triple }
+                                    ]" :key="p.key"
+                                    class="bg-slate-800/50 rounded-xl p-4 border cursor-help"
+                                    :class="Math.abs(p.d.z) >= 3 ? 'border-amber-500/40' : 'border-white/5'"
+                                    :title="`實際 ${p.d.count.toLocaleString()} 局（${p.d.pct.toFixed(2)}%）
+    設計值 ${p.d.specPct.toFixed(2)}%
+    差 ${p.d.diff >= 0 ? '+' : ''}${p.d.diff.toFixed(2)}pp，約 ${Math.abs(p.d.z).toFixed(1)} 個標準誤`">
+                                    <div class="text-xs text-gray-500 mb-1">{{ p.key }}</div>
+                                    <div class="flex items-baseline gap-2">
+                                        <span class="text-2xl font-bold text-white">{{ p.d.pct.toFixed(2) }}%</span>
+                                        <span class="text-xs text-gray-500">設計 {{ p.d.specPct.toFixed(2) }}%</span>
+                                    </div>
+                                    <div class="text-xs mt-1" :class="Math.abs(p.d.z) >= 3 ? 'text-amber-400' : (Math.abs(p.d.z) >= 2 ? 'text-gray-400' : 'text-green-400')">
+                                        {{ p.d.diff >= 0 ? '+' : '' }}{{ p.d.diff.toFixed(2) }}pp
+                                        <span class="text-gray-600">· {{ p.d.count.toLocaleString() }} 局</span>
+                                        <span v-if="Math.abs(p.d.z) < 2" class="text-green-400">· 符合設計</span>
                                     </div>
                                 </div>
-                                <div class="text-[9px] text-gray-500 mt-1.5 text-center">
-                                    最熱 <span class="text-red-300">{{ b.hot }}</span> ·
-                                    最冷 <span class="text-blue-300">{{ b.cold }}</span>
+                            </div>
+                            <p class="text-[11px] text-gray-500 mt-3 leading-relaxed">
+                                「三球皆不同」與「雙同球」是互補的，兩者的偏差必然大小相同、方向相反，算同一個偏離而非兩個獨立證據。
+                                以目前 {{ houseStats.ballPattern.rounds.toLocaleString() }} 局計，單一比例的標準誤約
+                                {{ (Math.sqrt(0.25 / houseStats.ballPattern.rounds) * 100).toFixed(2) }}pp。
+                            </p>
+                        </div>
+
+                        <!-- 落點對照 -->
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div v-for="t in [
+                                    { key: '雙同球落在哪一格', rows: houseStats.ballPattern.pairCells, chi: houseStats.ballPattern.pairChi, hue: 'rgba(99,102,241,' },
+                                    { key: '三同球落在哪一格', rows: houseStats.ballPattern.tripleCells, chi: houseStats.ballPattern.tripleChi, hue: 'rgba(251,191,36,' },
+                                    { key: '全部球的落點（對照）', rows: houseStats.ballPattern.allCells, chi: houseStats.ballPattern.allChi, hue: 'rgba(52,211,153,' }
+                                ]" :key="t.key">
+                                <div class="flex items-baseline justify-between mb-2">
+                                    <h4 class="text-sm font-bold text-gray-300">{{ t.key }}</h4>
+                                    <span class="text-[10px] cursor-help"
+                                        :class="t.chi > 15.51 ? 'text-amber-400' : 'text-gray-500'"
+                                        :title="`卡方檢定 (df=8)，5% 臨界值 15.51。\n已除以 design effect ${houseStats.ballPattern.deff.toFixed(3)} —— 同一局的 3 顆球不是 3 個獨立觀測，不校正會高估顯著性。`">
+                                        卡方 {{ t.chi.toFixed(1) }}{{ t.chi > 15.51 ? ' ⚠' : '' }}
+                                    </span>
                                 </div>
+                                <table class="w-full text-xs">
+                                    <thead><tr class="text-gray-500 text-left border-b border-white/5">
+                                        <th class="py-1">格</th><th class="py-1 text-right">次數</th>
+                                        <th class="py-1 text-right">占比</th><th class="py-1 text-right">z</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        <tr v-for="c in t.rows" :key="c.place" class="border-b border-white/5">
+                                            <td class="py-1">
+                                                <span class="inline-block w-5 text-center rounded text-white"
+                                                    :style="{ backgroundColor: t.hue + Math.min(0.75, Math.abs(c.z) / 4 * 0.7 + 0.08).toFixed(2) + ')' }">{{ c.place }}</span>
+                                            </td>
+                                            <td class="py-1 text-right text-gray-400">{{ c.count.toLocaleString() }}</td>
+                                            <td class="py-1 text-right text-gray-300">{{ c.pct.toFixed(2) }}%</td>
+                                            <td class="py-1 text-right font-bold"
+                                                :class="c.strong ? (c.z > 0 ? 'text-amber-400' : 'text-sky-400')
+                                                    : (Math.abs(c.z) >= 2 ? (c.z > 0 ? 'text-amber-400/50' : 'text-sky-400/50') : 'text-gray-600')"
+                                                :title="c.strong ? '通過 9 格同時檢定的 Bonferroni 門檻 (|z|>2.77)'
+                                                    : (Math.abs(c.z) >= 2 ? '單看是偏離，但九格一起檢定時撐不過門檻' : '')">
+                                                {{ c.z > 0 ? '+' : '' }}{{ c.z.toFixed(2) }}{{ c.strong ? ' ●' : '' }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p v-if="t.key.indexOf('三同') === 0 && houseStats.ballPattern.triple.count < 200" class="text-[10px] text-gray-500 mt-2">
+                                    僅 {{ houseStats.ballPattern.triple.count }} 局，每格期望不到 {{ Math.ceil(houseStats.ballPattern.triple.count / 9) }} 次，卡方在此樣本下不可靠，僅供觀察。
+                                </p>
                             </div>
                         </div>
-                        <p class="text-[10px] text-gray-500 mt-3 leading-relaxed">
-                            區間切得越細，每一格分到的球越少、顏色就越容易因為運氣而跳動。
-                            目前平均每格約 {{ (houseStats.ballBuckets.reduce((a, b) => a + b.total, 0) / houseStats.ballBuckets.length / 9).toFixed(1) }} 顆球，
-                            差幾顆顏色就會明顯不同。要判斷是否真的異常，請看較大的區間或上方那三張整體表格。
+
+                        <p class="text-xs text-gray-500 mt-4 leading-relaxed">
+                            <span class="text-gray-400">● 標記</span>代表該格通過九格同時檢定的門檻（|z| &gt; 2.77）；
+                            只有 |z| ≥ 2 的以淡色呈現 —— 九格一起看時，光是 2 個標準差還撐不住。
+                            所有卡方與 z 都已除以 design effect
+                            <span class="text-gray-400">{{ houseStats.ballPattern.deff.toFixed(3) }}</span>
+                            （同一局的 3 顆球會互相牽動，不是 3 個獨立觀測）。
+                            <br>
+                            內部對照：雙同球局裡「落單那一顆」的落點卡方為
+                            <span class="font-bold text-gray-400">{{ houseStats.ballPattern.oddChi.toFixed(1) }}</span>。
+                            若它接近均勻而重複的那顆明顯偏斜，代表偏誤集中在「重複」這件事上，而不是整體落球都偏。
                         </p>
                     </div>
+                    </template>
 
-                </div>
-
-                <!-- ===== D. 營運節奏 ===== -->
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-xl font-bold text-white mb-1">營運節奏</h3>
-                    <p class="text-sm text-gray-400 mb-5">開局是否順暢，有沒有被個別長局卡住。</p>
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
-                            <div class="font-bold text-white mb-1">被長局卡住的時間</div>
-                            <p class="text-xs text-gray-500 mb-4">
-                                一般一局 {{ Math.round(houseStats.medianDur) }} 秒；下列各局遠超此值，期間開不了新局。
-                                <span v-if="houseStats.maintenanceCount" class="text-gray-600">
-                                    每日例行維護造成的 {{ houseStats.maintenanceCount }} 局（合計 {{ fmtHours(houseStats.maintenanceSeconds) }}）已排除。
-                                </span>
+                    <template v-if="sec.id === 'ballHeat'">
+                    <!-- ===== 落球熱力圖 (獨立區塊, 方便單獨排序) ===== -->
+                    <div v-if="!houseStats.ballBuckets.length" class="glass rounded-2xl p-6 text-sm text-gray-500">
+                        落球熱力圖：此範圍沒有可用的賽果。
+                    </div>
+                        <div class="glass rounded-2xl p-6">
+                            <div class="flex flex-wrap items-center gap-3 mb-3">
+                                <h3 class="text-xl font-bold text-white">落球熱力圖</h3>
+                                <div class="flex rounded-lg overflow-hidden border border-white/10">
+                                    <button @click="ballGranMode = 'time'; ballGranSize = 60"
+                                        class="px-3 py-1 text-xs transition-colors"
+                                        :class="ballGranMode === 'time' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依時間</button>
+                                    <button @click="ballGranMode = 'rounds'; ballGranSize = 100"
+                                        class="px-3 py-1 text-xs transition-colors"
+                                        :class="ballGranMode === 'rounds' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">依局數</button>
+                                </div>
+                                <div class="flex gap-1">
+                                    <button v-for="o in ballGranOptions[ballGranMode]" :key="o.v" @click="ballGranSize = o.v"
+                                        class="px-2.5 py-1 rounded text-xs transition-colors border"
+                                        :class="ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5'">
+                                        {{ o.t }}
+                                    </button>
+                                </div>
+                                <button @click="showHeatmapModal = true"
+                                    class="ml-auto px-2.5 py-1 rounded text-xs font-bold transition-colors border text-gray-300 border-white/15 hover:bg-white/10"
+                                    title="開啟放大檢視，一次看到所有區間">
+                                    放大檢視
+                                </button>
+                                <button @click="exportBallHeatmapPng"
+                                    class="px-2.5 py-1 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
+                                    :title="`把目前的 ${houseStats.ballBuckets.length} 個區間匯出成 PNG，樣式與畫面相同`">
+                                    匯出 PNG
+                                </button>
+                                <div class="flex items-center gap-2 text-[10px] text-gray-400">
+                                    <span>偏冷</span>
+                                    <span class="inline-block w-24 h-3 rounded border border-white/10"
+                                        style="background:linear-gradient(to right, rgb(0,0,255), rgb(255,255,255), rgb(255,0,0))"></span>
+                                    <span>偏熱</span>
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-gray-500 mb-3">
+                                每張九宮格是一個區間，格內數字是該格開出的球數。顏色代表與該區間平均的差距
+                                （以標準差衡量，|z| ≥ 3 為滿色），所以不同大小的區間之間可以直接比較。
+                                共 {{ houseStats.ballBuckets.length }} 個區間。
                             </p>
-                            <div v-if="!houseStats.longCount" class="text-sm text-green-400 py-4">
-                                沒有異常長的局，開局節奏正常。
-                                <span v-if="houseStats.maintenanceCount" class="text-gray-500 block mt-1 text-xs">
-                                    （{{ houseStats.maintenanceCount }} 局落在每日維護時段，屬正常停機，未列入）
-                                </span>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 max-h-[560px] overflow-y-auto pr-1">
+                                <div v-for="(b, i) in houseStats.ballBuckets" :key="i"
+                                    class="bg-slate-800/40 rounded-lg p-2 border border-white/5">
+                                    <div class="flex items-baseline justify-between mb-1.5">
+                                        <span class="text-[11px] font-bold text-gray-300 truncate" :title="b.from + ' ~ ' + b.to">{{ b.label }}</span>
+                                        <span class="text-[9px] text-gray-500 shrink-0 ml-1">{{ b.rounds }} 局</span>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-px bg-black/40 rounded overflow-hidden">
+                                        <div v-for="g in 9" :key="g"
+                                            class="aspect-square flex items-center justify-center text-[11px] font-bold cursor-help"
+                                            :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
+                                                      color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
+                                            :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
+                                            {{ b.counts[g-1] }}
+                                        </div>
+                                    </div>
+                                    <div class="text-[9px] text-gray-500 mt-1.5 text-center">
+                                        最熱 <span class="text-red-300">{{ b.hot }}</span> ·
+                                        最冷 <span class="text-blue-300">{{ b.cold }}</span>
+                                    </div>
+                                </div>
                             </div>
-                            <template v-else>
-                            <div class="text-3xl font-bold text-white mb-1">{{ fmtHours(houseStats.lostSeconds) }}</div>
-                            <div class="text-xs text-gray-500 mb-4">
-                                {{ houseStats.longCount }} 局異常長，合計佔掉 {{ (houseStats.lostSeconds / 3600 / houseStats.spanHours * 100).toFixed(1) }}% 的營運時間
-                            </div>
-                            <table class="w-full text-xs">
-                                <thead><tr class="text-gray-500 text-left border-b border-white/5">
-                                    <th class="py-1">局號</th><th class="py-1">開始時間</th><th class="py-1 text-right">時長</th>
-                                </tr></thead>
-                                <tbody>
-                                    <tr v-for="d in houseStats.longRounds" :key="d.code" class="border-b border-white/5">
-                                        <td class="py-1 text-gray-400">{{ d.code }}</td>
-                                        <td class="py-1 text-gray-500">{{ d.time }}</td>
-                                        <td class="py-1 text-right font-bold text-amber-400">{{ fmtHours(d.sec) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            </template>
-                            <p v-if="houseStats.longCount" class="text-xs text-gray-500 mt-3">
-                                已排除每日例行維護。這些不是機器停機 — 局與局之間的銜接一直是正常的，要問的是「為什麼這幾局會跑這麼久」。
+                            <p class="text-[10px] text-gray-500 mt-3 leading-relaxed">
+                                區間切得越細，每一格分到的球越少、顏色就越容易因為運氣而跳動。
+                                目前平均每格約 {{ (houseStats.ballBuckets.reduce((a, b) => a + b.total, 0) / houseStats.ballBuckets.length / 9).toFixed(1) }} 顆球，
+                                差幾顆顏色就會明顯不同。要判斷是否真的異常，請看較大的區間，或對照「落球型態」區塊的整體表格。
                             </p>
                         </div>
+
+                    </template>
+
+                    <template v-if="sec.id === 'rhythm'">
+                    <!-- ===== D. 營運節奏 ===== -->
+                    <div class="glass rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-1">營運節奏</h3>
+                        <p class="text-sm text-gray-400 mb-5">開局是否順暢，有沒有被個別長局卡住。</p>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-slate-800/50 rounded-xl p-5 border border-white/5">
+                                <div class="font-bold text-white mb-1">被長局卡住的時間</div>
+                                <p class="text-xs text-gray-500 mb-4">
+                                    一般一局 {{ Math.round(houseStats.medianDur) }} 秒；下列各局遠超此值，期間開不了新局。
+                                    <span v-if="houseStats.maintenanceCount" class="text-gray-600">
+                                        每日例行維護造成的 {{ houseStats.maintenanceCount }} 局（合計 {{ fmtHours(houseStats.maintenanceSeconds) }}）已排除。
+                                    </span>
+                                </p>
+                                <div v-if="!houseStats.longCount" class="text-sm text-green-400 py-4">
+                                    沒有異常長的局，開局節奏正常。
+                                    <span v-if="houseStats.maintenanceCount" class="text-gray-500 block mt-1 text-xs">
+                                        （{{ houseStats.maintenanceCount }} 局落在每日維護時段，屬正常停機，未列入）
+                                    </span>
+                                </div>
+                                <template v-else>
+                                <div class="text-3xl font-bold text-white mb-1">{{ fmtHours(houseStats.lostSeconds) }}</div>
+                                <div class="text-xs text-gray-500 mb-4">
+                                    {{ houseStats.longCount }} 局異常長，合計佔掉 {{ (houseStats.lostSeconds / 3600 / houseStats.spanHours * 100).toFixed(1) }}% 的營運時間
+                                </div>
+                                <table class="w-full text-xs">
+                                    <thead><tr class="text-gray-500 text-left border-b border-white/5">
+                                        <th class="py-1">局號</th><th class="py-1">開始時間</th><th class="py-1 text-right">時長</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        <tr v-for="d in houseStats.longRounds" :key="d.code" class="border-b border-white/5">
+                                            <td class="py-1 text-gray-400">{{ d.code }}</td>
+                                            <td class="py-1 text-gray-500">{{ d.time }}</td>
+                                            <td class="py-1 text-right font-bold text-amber-400">{{ fmtHours(d.sec) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                </template>
+                                <p v-if="houseStats.longCount" class="text-xs text-gray-500 mt-3">
+                                    已排除每日例行維護。這些不是機器停機 — 局與局之間的銜接一直是正常的，要問的是「為什麼這幾局會跑這麼久」。
+                                </p>
+                            </div>
+                        </div>
                     </div>
+                    </template>
+                </div>
+
+                <div v-if="!houseOrderIsDefault" class="text-right">
+                    <button @click="resetHouseOrder"
+                        class="text-xs text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 rounded px-3 py-1.5 transition-colors">
+                        恢復預設排序
+                    </button>
                 </div>
             </template>
         </div>
@@ -2803,6 +2847,78 @@
                     }, 'image/png');
                 };
 
+                // ===== 大盤區塊排序 =====
+                // 使用者可以拖曳調整順序, 把最常看的放最上面。順序存在瀏覽器裡。
+                const HOUSE_SECTIONS = [
+                    { id: 'revenue', name: '營收表現' },
+                    { id: 'cost', name: '功能成本' },
+                    { id: 'ball', name: '落球型態' },
+                    { id: 'ballHeat', name: '落球熱力圖' },
+                    { id: 'rhythm', name: '營運節奏' }
+                ];
+                const HOUSE_DEFAULT_ORDER = HOUSE_SECTIONS.map(s => s.id);
+
+                // 存檔可能是舊版留下的: 補上新增的區塊、濾掉已移除的, 免得改版後有區塊消失
+                const normalizeOrder = (ids) => {
+                    const known = new Set(HOUSE_DEFAULT_ORDER);
+                    const seen = new Set();
+                    const out = [];
+                    (Array.isArray(ids) ? ids : []).forEach(id => {
+                        if (known.has(id) && !seen.has(id)) { seen.add(id); out.push(id); }
+                    });
+                    HOUSE_DEFAULT_ORDER.forEach(id => { if (!seen.has(id)) out.push(id); });
+                    return out;
+                };
+
+                const houseOrder = ref(normalizeOrder((() => {
+                    try { return JSON.parse(store.get('livemines_house_order') || '[]'); }
+                    catch (e) { return []; }
+                })()));
+                watch(houseOrder, (v) => store.set('livemines_house_order', JSON.stringify(v)), { deep: true });
+
+                const houseSections = computed(() =>
+                    houseOrder.value.map(id => HOUSE_SECTIONS.find(s => s.id === id)).filter(Boolean));
+                const houseOrderIsDefault = computed(() =>
+                    houseOrder.value.join(',') === HOUSE_DEFAULT_ORDER.join(','));
+                const resetHouseOrder = () => { houseOrder.value = HOUSE_DEFAULT_ORDER.slice(); };
+
+                const houseDragIndex = ref(null);
+                const houseDragOver = ref(null);
+
+                const startHouseDrag = (idx, ev) => {
+                    houseDragIndex.value = idx;
+                    if (ev && ev.dataTransfer) {
+                        ev.dataTransfer.effectAllowed = 'move';
+                        ev.dataTransfer.setData('text/plain', String(idx)); // Firefox 沒有這行不會觸發 drag
+                        // 拖的是握把, 但預覽圖要顯示整個區塊, 否則看不出在搬什麼
+                        const card = ev.target.closest('[draggable]')?.parentElement?.parentElement;
+                        if (card && ev.dataTransfer.setDragImage) {
+                            try { ev.dataTransfer.setDragImage(card, 40, 20); } catch (e) { /* 忽略 */ }
+                        }
+                    }
+                };
+                const endHouseDrag = () => { houseDragIndex.value = null; houseDragOver.value = null; };
+
+                const moveHouseSection = (from, delta) => {
+                    const to = from + delta;
+                    if (to < 0 || to >= houseOrder.value.length) return;
+                    const next = houseOrder.value.slice();
+                    const [item] = next.splice(from, 1);
+                    next.splice(to, 0, item);
+                    houseOrder.value = next;
+                };
+
+                const dropHouseSection = (target) => {
+                    const from = houseDragIndex.value;
+                    houseDragOver.value = null;
+                    houseDragIndex.value = null;
+                    if (from === null || from === target) return;
+                    const next = houseOrder.value.slice();
+                    const [item] = next.splice(from, 1);
+                    next.splice(target, 0, item);
+                    houseOrder.value = next;
+                };
+
                 // ===== 大盤分析 (只吃 game_results, 不與注單檔交叉) =====
                 const houseStats = computed(() => {
                     const raw = gameResultsData.value || [];
@@ -3369,7 +3485,9 @@
                 return {
                     activeTab, hasGameData, gameResultsData,
                     coverImage, coverFailed, showCover,
-                    houseStats, fmtInt, fmtHours, alignMinRounds: ALIGN_MIN_ROUNDS,
+                    houseStats, fmtInt, fmtHours,
+                    houseSections, houseOrderIsDefault, resetHouseOrder, houseDragIndex, houseDragOver,
+                    startHouseDrag, endHouseDrag, dropHouseSection, moveHouseSection, alignMinRounds: ALIGN_MIN_ROUNDS,
                     ballGranMode, ballGranSize, ballGranOptions: BALL_GRAN_OPTIONS, divergingCell, exportBallHeatmapPng, showHeatmapModal,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
