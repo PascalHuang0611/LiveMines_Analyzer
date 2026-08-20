@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.39</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.40</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -2671,21 +2671,42 @@
                     const PAD = 10, HEAD = 24, FOOT = 20, CARD_GAP = 12, MARGIN = 24;
                     const CARD_W = GRID + PAD * 2;
                     const CARD_H = PAD + HEAD + GRID + FOOT + PAD;
-                    const cols = Math.min(6, buckets.length);
-                    const rows = Math.ceil(buckets.length / cols);
                     const TITLE = 64, LEGEND = 44;
 
-                    const W = MARGIN * 2 + cols * CARD_W + (cols - 1) * CARD_GAP;
-                    const H = MARGIN * 2 + TITLE + rows * CARD_H + (rows - 1) * CARD_GAP + LEGEND;
+                    // 欄數固定的話, 區間一多就變成又高又窄、一少就變成又扁又長。
+                    // 改成挑一個讓整體最接近 16:9 的欄數, 輸出貼進投影片或文件才不會怪。
+                    const TARGET = 16 / 9;
+                    const sizeFor = (c) => {
+                        const rw = Math.ceil(buckets.length / c);
+                        return {
+                            cols: c, rows: rw,
+                            w: MARGIN * 2 + c * CARD_W + (c - 1) * CARD_GAP,
+                            h: MARGIN * 2 + TITLE + rw * CARD_H + (rw - 1) * CARD_GAP + LEGEND
+                        };
+                    };
+                    let best = sizeFor(1);
+                    for (let c = 2; c <= buckets.length; c++) {
+                        const cand = sizeFor(c);
+                        if (Math.abs(cand.w / cand.h - TARGET) < Math.abs(best.w / best.h - TARGET)) best = cand;
+                    }
+                    const cols = best.cols, rows = best.rows;
+
+                    // 再把畫布補成剛好 16:9, 內容置中 —— 挑欄數只能逼近, 補邊才會精準
+                    const W = Math.max(best.w, Math.round(best.h * TARGET));
+                    const H = Math.max(best.h, Math.round(best.w / TARGET));
+                    const offX = Math.round((W - best.w) / 2);
+                    const offY = Math.round((H - best.h) / 2);
 
                     const cv = document.createElement('canvas');
                     cv.width = W * S; cv.height = H * S;
                     const ctx = cv.getContext('2d');
                     ctx.scale(S, S);
+                    ctx.translate(offX, offY);
                     const FONT = '"Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif';
 
+                    // 已經 translate 過, 底色要從負偏移畫起才蓋得滿整張畫布
                     ctx.fillStyle = '#0f172a';
-                    ctx.fillRect(0, 0, W, H);
+                    ctx.fillRect(-offX, -offY, W, H);
 
                     // 標題
                     const gran = ballGranMode.value === 'rounds'
