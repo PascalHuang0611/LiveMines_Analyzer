@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.43</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.45</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1252,6 +1252,60 @@
                                 {{ fmtInt(houseStats.worstOne.bet) }} 賠出 {{ fmtInt(houseStats.worstOne.payout) }}，淨損
                                 {{ fmtInt(-houseStats.worstOne.ggr) }}
                             </p>
+
+                            <!-- 要剔掉幾局才回到目標 RTP -->
+                            <div class="mt-3 pt-3 border-t border-amber-500/20">
+                                <template v-if="houseStats.rtpTarget.alreadyBelow">
+                                    <p class="text-sm text-gray-300">
+                                        目前 RTP <span class="font-bold text-green-400">{{ houseStats.rtp.toFixed(2) }}%</span>
+                                        已在目標 {{ houseStats.rtpTarget.target }}% 以下，沒有需要特別盯的局。
+                                    </p>
+                                </template>
+                                <template v-else-if="!houseStats.rtpTarget.reached">
+                                    <p class="text-sm text-gray-300">
+                                        即使剔除最賠的 {{ houseStats.rtpTarget.count }} 局，RTP 仍在
+                                        {{ houseStats.rtpTarget.target }}% 以上 ——
+                                        <span class="text-amber-300">偏高不是少數幾局造成的</span>，是整體結果偏移。
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <p class="text-sm text-gray-300 leading-relaxed">
+                                        剔除最賠的
+                                        <span class="font-bold text-amber-300">{{ houseStats.rtpTarget.count }} 局</span>
+                                        後，RTP 就從 <span class="font-bold text-white">{{ houseStats.rtp.toFixed(2) }}%</span>
+                                        降到 <span class="font-bold text-green-400">{{ houseStats.rtpTarget.rtpAfter.toFixed(2) }}%</span>
+                                        （目標 {{ houseStats.rtpTarget.target }}% 以下）。
+                                        這 {{ houseStats.rtpTarget.count }} 局合計淨損
+                                        <span class="font-bold text-red-400">{{ fmtInt(houseStats.rtpTarget.lossSum) }}</span>
+                                        —— 就是最值得回頭看的那幾局。
+                                    </p>
+                                    <table class="w-full text-xs mt-3">
+                                        <thead><tr class="text-gray-500 text-left border-b border-white/10">
+                                            <th class="py-1 w-6"></th><th class="py-1">局號</th><th class="py-1">時間</th>
+                                            <th class="py-1 text-right">投注</th><th class="py-1 text-right">派彩</th>
+                                            <th class="py-1 text-right">淨損</th><th class="py-1 text-right">剔除後 RTP</th>
+                                        </tr></thead>
+                                        <tbody>
+                                            <tr v-for="(r, i) in houseStats.rtpTarget.list" :key="r.code" class="border-b border-white/5">
+                                                <td class="py-1 text-[10px] text-gray-600">{{ i + 1 }}</td>
+                                                <td class="py-1 font-mono text-[11px] text-gray-300">{{ r.code }}</td>
+                                                <td class="py-1 text-gray-500">{{ r.time.slice(5, 16) }}</td>
+                                                <td class="py-1 text-right text-gray-400">{{ fmtInt(r.bet) }}</td>
+                                                <td class="py-1 text-right text-gray-400">{{ fmtInt(r.payout) }}</td>
+                                                <td class="py-1 text-right font-bold text-red-400">{{ fmtInt(-r.ggr) }}</td>
+                                                <td class="py-1 text-right" :class="r.rtpAfter < houseStats.rtpTarget.target ? 'text-green-400' : 'text-gray-500'">
+                                                    {{ r.rtpAfter.toFixed(2) }}%
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p v-if="houseStats.rtpTarget.count > houseStats.rtpTarget.list.length"
+                                        class="text-[10px] text-gray-500 mt-2">
+                                        另有 {{ houseStats.rtpTarget.count - houseStats.rtpTarget.list.length }} 局未列出（僅顯示淨損最大的
+                                        {{ houseStats.rtpTarget.list.length }} 局）。
+                                    </p>
+                                </template>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1380,9 +1434,9 @@
                         <!-- 落點對照 -->
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <div v-for="t in [
+                                    { key: '全部球的落點（對照）', rows: houseStats.ballPattern.allCells, chi: houseStats.ballPattern.allChi, hue: 'rgba(52,211,153,' },
                                     { key: '雙同球落在哪一格', rows: houseStats.ballPattern.pairCells, chi: houseStats.ballPattern.pairChi, hue: 'rgba(99,102,241,' },
-                                    { key: '三同球落在哪一格', rows: houseStats.ballPattern.tripleCells, chi: houseStats.ballPattern.tripleChi, hue: 'rgba(251,191,36,' },
-                                    { key: '全部球的落點（對照）', rows: houseStats.ballPattern.allCells, chi: houseStats.ballPattern.allChi, hue: 'rgba(52,211,153,' }
+                                    { key: '三同球落在哪一格', rows: houseStats.ballPattern.tripleCells, chi: houseStats.ballPattern.tripleChi, hue: 'rgba(251,191,36,' }
                                 ]" :key="t.key">
                                 <div class="flex items-baseline justify-between mb-2">
                                     <h4 class="text-sm font-bold text-gray-300">{{ t.key }}</h4>
@@ -2727,6 +2781,9 @@
                 // 上線前訂好的落球型態設計值(%)。改版若調整了落球規則, 這裡要跟著改, 否則對照沒有意義。
                 const BALL_PATTERN_SPEC = { distinct: 50.00, pair: 45.50, triple: 4.50 };
 
+                // 「要剔掉幾局才回到目標 RTP」用的門檻。設計值變了就改這裡。
+                const RTP_TARGET = 97;
+
                 const MAINTENANCE_FROM = 6 * 60 + 30;
                 const MAINTENANCE_TO = 9 * 60 + 30;
 
@@ -3015,6 +3072,28 @@
                     }
                     const worstOne = worstFirst[0];
 
+                    // 依單局淨損由大到小逐一剔除, 看要剔掉幾局 RTP 才落到目標以下。
+                    // 這比「剔掉 N 局毛利變多少」更好理解 —— 直接指出哪幾局要盯。
+                    let rb = bet, rp = payout;
+                    const toTarget = [];
+                    const startRtp = bet > 0 ? payout / bet * 100 : 0;
+                    while (rb > 0 && (rp / rb * 100) >= RTP_TARGET
+                           && toTarget.length < worstFirst.length && toTarget.length < 300) {
+                        const r = worstFirst[toTarget.length];
+                        rb -= r.bet; rp -= r.payout;
+                        toTarget.push({ ...r, rtpAfter: rb > 0 ? rp / rb * 100 : 0 });
+                    }
+                    const rtpTarget = {
+                        target: RTP_TARGET,
+                        alreadyBelow: startRtp < RTP_TARGET,
+                        reached: rb > 0 && (rp / rb * 100) < RTP_TARGET,
+                        count: toTarget.length,
+                        rtpAfter: rb > 0 ? rp / rb * 100 : 0,
+                        // 局數多的時候只列前面幾局, 其餘用數字帶過
+                        list: toTarget.slice(0, 12),
+                        lossSum: toTarget.reduce((a, x) => a - x.ggr, 0)
+                    };
+
                     // --- 累積 RTP: 說明「這個數字要跑多久才穩」 ---
                     const cumulative = [];
                     let cb = 0, cw = 0;
@@ -3237,7 +3316,7 @@
                         })),
                         ggrWithoutBg: ggr + bgWin,
                         poolNow, jpHits, ballPattern, ballBuckets,
-                        tailCurve, worstOne, worstList: worstFirst.slice(0, 5),
+                        tailCurve, worstOne, worstList: worstFirst.slice(0, 5), rtpTarget,
                         ggrDrop1: tailCurve[1] ? tailCurve[1].ggr : ggr,
                         ggrDrop10: tailCurve[10] ? tailCurve[10].ggr : ggr,
                         cumulative, settleAt, midPoint,
