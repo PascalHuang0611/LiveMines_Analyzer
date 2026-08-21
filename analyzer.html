@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.48</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.49</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -272,11 +272,14 @@
                     class="px-2 py-1 rounded border text-xs transition-colors"
                     :class="canShift(-1) ? 'text-gray-300 border-white/15 hover:bg-white/10' : 'text-gray-700 border-white/5 cursor-not-allowed'"
                     title="保持視窗長度往前平移一段">◀</button>
-                <input type="datetime-local" step="60" v-model.lazy="rangeFromInput"
+                <!-- lang 決定原生控件的顯示格式。zh-TW 是 12 小時制會出現「下午」, 容易跟 24 小時的
+                     資料時間混淆; zh-Hans-CN 是 24 小時制而且維持 年/月/日 的順序,
+                     日曆面板的月份與星期字樣在繁簡下是同一批字, 所以看起來不會變。 -->
+                <input type="datetime-local" step="60" lang="zh-Hans-CN" v-model.lazy="rangeFromInput"
                     :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
                     class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm w-[255px]">
                 <span class="text-gray-500">→</span>
-                <input type="datetime-local" step="60" v-model.lazy="rangeToInput"
+                <input type="datetime-local" step="60" lang="zh-Hans-CN" v-model.lazy="rangeToInput"
                     :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
                     class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm w-[255px]">
                 <button @click="shiftWindow(1)" :disabled="!canShift(1)"
@@ -2031,23 +2034,33 @@
                 // 回退到資料邊界會讓使用者挑好的視窗無聲消失且沒有 undo, 所以改成回退到「原本的值」。
                 // inputNonce: getter 是 computed, 若回退值與現值完全相同就沒有任何依賴改變, Vue 不會重繪,
                 // v-model 也不會把值寫回 DOM —— 欄位就一直停在空白, 而篩選其實還在用原本的時間。
+                //
+                // 起點超過終點時, 夾住「正在編輯的那一邊」, 絕不去動使用者沒碰的那一邊。
+                // 原本的做法是把另一邊拉過來對齊, 結果是: 資料只到 8/21 06:xx 而使用者把起點設成
+                // 8/21 08:00 時, 終點會被無聲拉成 8/21 08:00 —— 看起來像工具擅自改了另一個欄位,
+                // 而且得到一個空視窗。夾住編輯中的那一邊則會直接顯示「最多只能到這裡」。
+                // 想把整個視窗往前後移的話用 ◀▶, 那才是為這件事設計的。
+                // 這裡刻意不夾 dataSpan: v-model.lazy 綁的是 change, 而逐位打年份時 Chrome 會依序
+                // 送出 0002/0020/0202/2026 四個都合法的值, 當場夾到 min 的話第一個數字打完就被彈回。
                 const inputNonce = ref(0);
                 const rangeFromInput = computed({
                     get: () => (inputNonce.value, toInput16(rangeFrom.value)),
                     set: (v) => {
-                        const f = normWall19(v, '00') || rangeFrom.value;
                         inputNonce.value++;
-                        if (!f) return;
-                        setRange(f, (rangeTo.value && rangeTo.value >= f) ? rangeTo.value : f, 'exact');
+                        let f = normWall19(v, '00');
+                        if (!f) return;                       // 空值或不合法 -> 維持原值, 欄位彈回
+                        if (rangeTo.value && f > rangeTo.value) f = rangeTo.value.slice(0, 16) + ':00';
+                        setRange(f, rangeTo.value || f, 'exact');
                     }
                 });
                 const rangeToInput = computed({
                     get: () => (inputNonce.value, toInput16(rangeTo.value)),
                     set: (v) => {
-                        const t = normWall19(v, '59') || rangeTo.value;
                         inputNonce.value++;
+                        let t = normWall19(v, '59');
                         if (!t) return;
-                        setRange((rangeFrom.value && rangeFrom.value <= t) ? rangeFrom.value : t, t, 'exact');
+                        if (rangeFrom.value && t < rangeFrom.value) t = rangeFrom.value.slice(0, 16) + ':59';
+                        setRange(rangeFrom.value || t, t, 'exact');
                     }
                 });
 
