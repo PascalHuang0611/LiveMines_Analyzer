@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.49</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.50</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -722,6 +722,8 @@
                 </div>
                 <div class="p-6 flex flex-col lg:flex-row gap-6 items-start">
                 <div class="flex-1 min-w-0 space-y-6">
+                    <!-- 兩排統計包成一塊, 排間距要跟格子內的 gap 一致, 否則會被讀成兩個不相干的區塊 -->
+                    <div class="space-y-4">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">總流水 (Turnover)</div>
@@ -743,6 +745,10 @@
                                 {{ playerView.rtp.toFixed(2) }}%
                             </div>
                         </div>
+                    </div>
+
+                    <!-- 局數與命中率另開一排(三欄), 因為按鈕已經搬走, 這些卡片可以縮回自然高度 -->
+                    <div class="grid grid-cols-3 gap-4 text-center">
                         <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5">
                             <div class="text-gray-400 text-xs mb-1">總參與局數</div>
                             <div class="font-bold text-white">{{ playerView.roundsCount.toLocaleString() }}</div>
@@ -759,25 +765,31 @@
                                 {{ playerView.roundsCount > 0 ? (playerView.totalWinRounds / playerView.roundsCount * 100).toFixed(2) : '0.00' }}%
                             </div>
                         </div>
-                        <div class="bg-slate-800/50 rounded-xl p-3 border border-white/5 flex flex-col justify-center gap-2">
-                            <button @click="openChart" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-bold transition-colors">
-                                查看歷程圖表
+                    </div>
+                    </div>
+
+                    <!-- 四顆按鈕獨立一排: 塞在統計格子裡會把整列的高度撐起來。
+                         左邊是「開圖看」, 右邊是「拿資料走」, 分兩群比較好認。 -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button @click="openChart"
+                            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-bold transition-colors">
+                            查看歷程圖表
+                        </button>
+                        <button @click="openBetTrend"
+                            class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded text-sm font-bold transition-colors">
+                            押注行為變化
+                        </button>
+                        <div class="flex gap-2 sm:ml-auto">
+                            <button @click="exportSummary"
+                                class="px-3 py-2 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-xs font-bold transition-colors"
+                                :title="`匯出彙總 CSV：摘要、每日明細、格位偏好、格數分布${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
+                                匯出彙總
                             </button>
-                            <button @click="openBetTrend" class="w-full py-2 bg-white/10 hover:bg-white/20 rounded text-sm font-bold transition-colors">
-                                押注行為變化
+                            <button @click="exportRounds"
+                                class="px-3 py-2 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-xs font-bold transition-colors"
+                                :title="`匯出每局明細 CSV：一列一局，共 ${playerView.roundsCount.toLocaleString()} 列${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
+                                匯出明細
                             </button>
-                            <div class="flex gap-1">
-                                <button @click="exportSummary"
-                                    class="flex-1 py-1.5 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors"
-                                    :title="`匯出彙總 CSV：摘要、每日明細、格位偏好、格數分布${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
-                                    匯出彙總
-                                </button>
-                                <button @click="exportRounds"
-                                    class="flex-1 py-1.5 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors"
-                                    :title="`匯出每局明細 CSV：一列一局，共 ${playerView.roundsCount.toLocaleString()} 列${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
-                                    匯出明細
-                                </button>
-                            </div>
                         </div>
                     </div>
 
