@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.47</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.48</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -274,11 +274,11 @@
                     title="保持視窗長度往前平移一段">◀</button>
                 <input type="datetime-local" step="60" v-model.lazy="rangeFromInput"
                     :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
-                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm font-mono w-[195px]">
+                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm w-[255px]">
                 <span class="text-gray-500">→</span>
                 <input type="datetime-local" step="60" v-model.lazy="rangeToInput"
                     :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
-                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm font-mono w-[195px]">
+                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm w-[255px]">
                 <button @click="shiftWindow(1)" :disabled="!canShift(1)"
                     class="px-2 py-1 rounded border text-xs transition-colors"
                     :class="canShift(1) ? 'text-gray-300 border-white/15 hover:bg-white/10' : 'text-gray-700 border-white/5 cursor-not-allowed'"
@@ -3712,7 +3712,10 @@
                     seqRounds.sort((x, y) => x.wall.localeCompare(y.wall));
 
                     const bucketLabel = (wall, minutes) => {
-                        if (minutes >= 1440) return wall.slice(0, 10);
+                        // 「每 1 天」用營運日(08:00 換日)而不是日曆日, 跟排行榜每日欄、每日卡片、
+                        // CSV 日期欄同一個口徑。原本切在午夜, 凌晨 00:00~07:59 那段會被算進下一天,
+                        // 同一份資料在這張圖跟其他地方會差快一千顆球。
+                        if (minutes >= 1440) return gamingDay(wall);
                         const hh = wall.slice(11, 13), mm = wall.slice(14, 16);
                         const slot = Math.floor((parseInt(hh) * 60 + parseInt(mm)) / minutes) * minutes;
                         const p = (n) => String(n).padStart(2, '0');
