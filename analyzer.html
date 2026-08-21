@@ -145,6 +145,15 @@
             animation: fade-in 0.2s ease forwards;
         }
         
+        /* Chrome 原生 datetime-local 的日曆圖示與下拉面板預設是亮底, 在這個深色介面上
+           圖示幾乎看不見、點開後整片白閃。color-scheme 是唯一能讓「原生面板」變深色的方法。 */
+        input[type="datetime-local"] { color-scheme: dark; }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            opacity: .55;
+            cursor: pointer;
+        }
+
         table {
             border-collapse: collapse;
             width: 100%;
@@ -175,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.46</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.47</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -253,63 +262,67 @@
             <p class="text-gray-400 mt-2">已載入 {{ processedFiles }} 個檔案，處理 {{ totalRawRows.toLocaleString() }} 筆注單</p>
         </div>
 
-        <!-- 時間範圍: 只有資料跨多日時才需要 -->
-        <div v-if="!isProcessing && availableDays.length > 1"
+        <!-- 時間範圍。單日資料也要顯示 —— 那正是最想切時分的場景(只看某一場) -->
+        <div v-if="!isProcessing && (hasData || hasGameData) && dataSpan"
             class="glass rounded-2xl px-5 py-4 mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 animate-fade-in-delayed">
-            <span class="text-sm text-gray-400 shrink-0 cursor-help"
-                :title="`營運日以每天 ${String(dayCutoverHour).padStart(2,'0')}:00 換日，對齊每日維護時段。\n凌晨的局會歸到前一個營運日，避免把同一個通宵場切成兩天。`">
-                時間範圍
-                <span class="text-[10px] text-gray-500 border border-white/10 rounded px-1 py-px ml-1 align-middle">
-                    {{ String(dayCutoverHour).padStart(2,'0') }}~{{ String(dayCutoverHour).padStart(2,'0') }}
-                </span>
-            </span>
+            <span class="text-sm text-gray-400 shrink-0">時間範圍</span>
 
-            <div class="flex items-center gap-2">
-                <select v-model="rangeFrom" class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm">
-                    <option v-for="d in availableDays" :key="'f'+d" :value="d" :disabled="d > rangeTo">{{ d }}</option>
-                </select>
+            <div class="flex items-center gap-1.5">
+                <button @click="shiftWindow(-1)" :disabled="!canShift(-1)"
+                    class="px-2 py-1 rounded border text-xs transition-colors"
+                    :class="canShift(-1) ? 'text-gray-300 border-white/15 hover:bg-white/10' : 'text-gray-700 border-white/5 cursor-not-allowed'"
+                    title="保持視窗長度往前平移一段">◀</button>
+                <input type="datetime-local" step="60" v-model.lazy="rangeFromInput"
+                    :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
+                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm font-mono w-[195px]">
                 <span class="text-gray-500">→</span>
-                <select v-model="rangeTo" class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm">
-                    <option v-for="d in availableDays" :key="'t'+d" :value="d" :disabled="d < rangeFrom">{{ d }}</option>
-                </select>
+                <input type="datetime-local" step="60" v-model.lazy="rangeToInput"
+                    :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
+                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm font-mono w-[195px]">
+                <button @click="shiftWindow(1)" :disabled="!canShift(1)"
+                    class="px-2 py-1 rounded border text-xs transition-colors"
+                    :class="canShift(1) ? 'text-gray-300 border-white/15 hover:bg-white/10' : 'text-gray-700 border-white/5 cursor-not-allowed'"
+                    title="保持視窗長度往後平移一段">▶</button>
             </div>
 
-            <div class="flex flex-wrap gap-1">
+            <div class="flex flex-wrap items-center gap-1">
                 <button @click="resetRange()"
                     class="px-2.5 py-1 rounded text-xs transition-colors border"
                     :class="rangeIsFull ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
                     全部 {{ availableDays.length }} 天
                 </button>
-
-                <!-- 天數不多時逐日列出最好用; 天數一多就會擠成一面按鈕牆, 改用相對區間 -->
-                <template v-if="availableDays.length <= 10">
-                    <button v-for="d in availableDays" :key="'q'+d" @click="rangeFrom = d; rangeTo = d"
-                        class="px-2.5 py-1 rounded text-xs transition-colors border"
-                        :class="rangeFrom === d && rangeTo === d ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
-                        {{ d.slice(5) }}
-                    </button>
-                </template>
-                <template v-else>
-                    <button v-for="n in [1, 3, 7, 14, 30]" :key="'l'+n" v-show="n < availableDays.length"
-                        @click="setLastDays(n)"
-                        class="px-2.5 py-1 rounded text-xs transition-colors border"
-                        :class="isLastDays(n) ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
-                        最近 {{ n }} 天
-                    </button>
-                </template>
+                <button v-if="hasPartialDay" @click="snapToGamingDays()"
+                    class="px-2.5 py-1 rounded text-xs transition-colors border text-amber-300 border-amber-400/30 hover:bg-amber-400/10"
+                    title="把拉歪的視窗吸回乾淨的營運日邊界（08:00 → 隔日 07:59）">整天化</button>
             </div>
 
-            <div class="basis-full text-[11px] text-gray-500 -mt-1">
-                以每日 {{ String(dayCutoverHour).padStart(2,'0') }}:00 為換日基準（對齊維護時段）——
-                例如「{{ availableDays[0] }}」代表 {{ availableDays[0] }} {{ String(dayCutoverHour).padStart(2,'0') }}:00
-                至隔日 {{ String(dayCutoverHour).padStart(2,'0') }}:00。
-            </div>
-
-            <div class="text-xs ml-auto text-right">
+            <div class="text-xs ml-auto text-right shrink-0">
                 <div v-if="!rangeIsFull" class="text-amber-400">已篩選 · 兩個分頁的數字都只計入此範圍</div>
-                <div class="text-gray-500">
+                <!-- 只載入 game_results 時沒有玩家單局, 顯示「0 筆」會被當成篩掉了 -->
+                <div v-if="hasData" class="text-gray-500">
                     此範圍 {{ activeRounds.length.toLocaleString() }} 筆玩家單局
                     <span v-if="!rangeIsFull" class="text-gray-600">／ 全部 {{ allRounds.length.toLocaleString() }}</span>
+                </div>
+                <div v-else class="text-gray-500">尚未載入注單檔，僅大盤資料</div>
+            </div>
+
+            <div class="basis-full">
+                <div v-if="rangeRestored" class="text-[11px] text-sky-400 mb-1 flex items-center gap-2">
+                    <span>已沿用你上次選的時間範圍</span>
+                    <button @click="resetRange()"
+                        class="text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 rounded px-1.5 py-px transition-colors">改為全部</button>
+                </div>
+                <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="font-mono text-gray-400">目前範圍 {{ rangeTextShort() }}</span>
+                    <span v-if="hasPartialDay"
+                        class="text-[10px] text-amber-300 border border-amber-400/40 rounded px-1 py-px"
+                        title="範圍的邊界切在某個營運日中間，那一天的每日欄位與餘額只涵蓋部分時段">部分時段</span>
+                    <span class="text-gray-600">
+                        篩選用實際時間、精確到分（起含當分 00 秒、迄含當分 59 秒）。
+                        日期欄位——排行榜每日欄、每日明細卡片、CSV 日期欄——仍以每日
+                        {{ String(dayCutoverHour).padStart(2,'0') }}:00 為營運日分界（對齊維護時段），
+                        所以邊界那一天可能只涵蓋部分時段，會標上「部分」。
+                    </span>
                 </div>
             </div>
         </div>
@@ -575,18 +588,34 @@
                                 </th>
                                 <template v-for="(d, di) in rangeDays" :key="'h'+d">
                                     <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]"
-                                        :class="di === 0 ? 'border-l-2 border-white/15' : 'border-l border-white/5'">
+                                        :class="di === 0 ? 'border-l-2 border-white/15' : 'border-l border-white/5'"
+                                        :title="d + ' 涵蓋 ' + dayWindowOf(d) + (dayCoveredFully(d) ? '（完整營運日）' : '（部分時段）')">
                                         <span class="text-indigo-200 font-bold">{{ d.slice(5) }}</span> 投注
+                                        <span v-if="isPartialDay(d)"
+                                            class="text-[9px] text-amber-300 border border-amber-400/40 rounded px-1 ml-1">部分</span>
                                     </th>
-                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]">初始餘額</th>
-                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]">結束餘額</th>
+                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]"
+                                        :title="isPartialDay(d) ? '此範圍內該日第一筆的餘額（' + dayWindowOf(d) + '），不是當日開盤' : ''">
+                                        {{ isPartialDay(d) ? '區間初始' : '初始餘額' }}</th>
+                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]"
+                                        :title="isPartialDay(d) ? '此範圍內該日最後一筆的餘額（' + dayWindowOf(d) + '），不是當日收盤' : ''">
+                                        {{ isPartialDay(d) ? '區間結束' : '結束餘額' }}</th>
                                 </template>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="!filteredPlayers.length">
                                 <td :colspan="7 + rangeDays.length * 3" class="p-8 text-center text-gray-500">
-                                    找不到{{ nicknameCount ? '暱稱或帳號' : '帳號' }}包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
+                                    <!-- 精確時間篩選之後「空範圍」變得隨手可得, 不分開講會渲染成
+                                         「找不到帳號包含「」的玩家」—— 引號裡什麼都沒有 -->
+                                    <template v-if="playerSearch.trim()">
+                                        找不到{{ nicknameCount ? '暱稱或帳號' : '帳號' }}包含「<span class="text-yellow-400">{{ playerSearch.trim() }}</span>」的玩家
+                                    </template>
+                                    <template v-else-if="!activeRounds.length">
+                                        這個時間範圍內沒有任何注單。
+                                        <button @click="resetRange()" class="text-indigo-300 hover:text-white underline decoration-dotted underline-offset-2 ml-1">改看全部</button>
+                                    </template>
+                                    <template v-else>沒有符合目前分群條件的玩家。</template>
                                 </td>
                             </tr>
                             <tr v-for="player in filteredPlayers.slice(0, displayCount)" :key="player.account" @click="selectedPlayer = player" class="group border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
@@ -668,7 +697,7 @@
                         <span :class="nicknameOf(selectedPlayer) ? 'text-indigo-400' : 'text-gray-600 italic font-normal text-xl'">{{ displayName(selectedPlayer) }}</span>
                         <span class="text-sm px-2 py-1 rounded bg-white/10 text-gray-300 font-normal border border-white/5">{{ selectedPlayer.segment }}</span>
                         <span v-if="selectedDay" class="text-sm px-2 py-1 rounded bg-indigo-600/30 text-indigo-200 font-normal border border-indigo-400/40 flex items-center gap-2">
-                            只看 {{ selectedDay }}
+                            只看 {{ selectedDay }}<span v-if="isPartialDay(selectedDay)" class="text-indigo-300/80">（{{ dayWindowOf(selectedDay) }} · 部分時段）</span>
                             <button @click="selectedDay = null" class="text-indigo-300 hover:text-white leading-none" title="回到全部日期">✕</button>
                         </span>
                     </h3>
@@ -821,13 +850,15 @@
                 <div class="w-full lg:w-64 shrink-0 lg:border-l lg:border-white/10 lg:pl-6">
                     <div class="flex items-baseline justify-between mb-2">
                         <h4 class="text-sm font-bold text-gray-200">每日明細</h4>
-                        <span class="text-[10px] text-gray-400">{{ playerDays.length }} 天</span>
+                        <span class="text-[10px] text-gray-400">
+                            {{ playerDays.length }} 個營運日<span v-if="hasPartialDay">（含部分）</span>
+                        </span>
                     </div>
                     <button @click="selectedDay = null"
                         class="w-full mb-2 px-3 py-1.5 rounded-lg text-xs transition-colors border"
                         :class="selectedDay === null ? 'bg-indigo-600 text-white border-indigo-500 font-bold'
                                                      : 'text-gray-300 border-white/10 hover:bg-white/5'">
-                        全部 {{ playerDays.length }} 天
+                        全部 {{ playerDays.length }} 個營運日
                     </button>
                     <p class="text-[10px] text-gray-400 mb-2">點卡片可只看那一天，左側統計會跟著變。</p>
                     <div v-if="!playerDays.length" class="text-xs text-gray-500 py-4">此範圍內沒有下注紀錄。</div>
@@ -838,7 +869,11 @@
                                 ? 'bg-indigo-600/25 border-indigo-400/60'
                                 : 'bg-slate-800/60 border-white/10 hover:border-white/25 hover:bg-slate-800'">
                             <div class="flex items-baseline justify-between mb-2">
-                                <span class="text-sm font-bold" :class="selectedDay === d.day ? 'text-white' : 'text-indigo-300'">{{ d.day.slice(5) }}</span>
+                                <span class="flex items-baseline gap-1">
+                                    <span class="text-sm font-bold" :class="selectedDay === d.day ? 'text-white' : 'text-indigo-300'">{{ d.day.slice(5) }}</span>
+                                    <span v-if="d.partial" class="text-[9px] text-amber-300 border border-amber-400/40 rounded px-1"
+                                        :title="'此範圍只涵蓋這一天的 ' + d.window">部分</span>
+                                </span>
                                 <span class="text-[10px] text-gray-400">{{ d.rounds.toLocaleString() }} 局</span>
                             </div>
                             <div class="flex justify-between text-xs mb-1.5">
@@ -846,11 +881,11 @@
                                 <span class="font-bold text-white">{{ formatMoney(d.bet) }}</span>
                             </div>
                             <div class="flex justify-between text-xs">
-                                <span class="text-gray-400">初始</span>
+                                <span class="text-gray-400">{{ d.partial ? '區間初' : '初始' }}</span>
                                 <span class="text-gray-200">{{ formatMoney(d.open) }}</span>
                             </div>
                             <div class="flex justify-between text-xs">
-                                <span class="text-gray-400">結束</span>
+                                <span class="text-gray-400">{{ d.partial ? '區間末' : '結束' }}</span>
                                 <span :class="d.close >= d.open ? 'text-green-400' : 'text-red-400'">{{ formatMoney(d.close) }}</span>
                             </div>
                             <div class="mt-2 pt-2 border-t border-white/5 flex justify-between text-xs">
@@ -862,8 +897,9 @@
                         </div>
                     </div>
                     <p class="text-[10px] text-gray-400 mt-3 leading-relaxed">
-                        餘額取當日第一筆與最後一筆注單的快照，中間的存提款也會反映在差額裡，
-                        所以「餘額變化」不等於當日輸贏。
+                        餘額取<span class="text-gray-300">此時間範圍內</span>該營運日第一筆與最後一筆注單的快照，
+                        所以標了「部分」的那一天拿到的是區間端點的餘額，不是當日開收。
+                        中間的存提款也會反映在差額裡，所以「餘額變化」不等於當日輸贏。
                     </p>
                 </div>
                 </div>
@@ -935,8 +971,11 @@
                     </div>
                     <div class="flex gap-1">
                         <button v-for="o in ballGranOptions[ballGranMode]" :key="o.v" @click="ballGranSize = o.v"
+                            :disabled="ballGranDisabled(o.v)"
+                            :title="ballGranDisabled(o.v) ? '比目前的時間範圍還長' : ''"
                             class="px-2.5 py-1 rounded text-xs transition-colors border"
-                            :class="ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5'">
+                            :class="ballGranDisabled(o.v) ? 'text-gray-700 border-transparent cursor-not-allowed'
+                                : (ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5')">
                             {{ o.t }}
                         </button>
                     </div>
@@ -1511,8 +1550,11 @@
                                 </div>
                                 <div class="flex gap-1">
                                     <button v-for="o in ballGranOptions[ballGranMode]" :key="o.v" @click="ballGranSize = o.v"
+                                        :disabled="ballGranDisabled(o.v)"
+                                        :title="ballGranDisabled(o.v) ? '比目前的時間範圍還長' : ''"
                                         class="px-2.5 py-1 rounded text-xs transition-colors border"
-                                        :class="ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5'">
+                                        :class="ballGranDisabled(o.v) ? 'text-gray-700 border-transparent cursor-not-allowed'
+                                            : (ballGranSize === o.v ? 'bg-white/10 text-white border-white/20' : 'text-gray-400 border-transparent hover:bg-white/5')">
                                         {{ o.t }}
                                     </button>
                                 </div>
@@ -1594,7 +1636,7 @@
                                 <template v-else>
                                 <div class="text-3xl font-bold text-white mb-1">{{ fmtHours(houseStats.lostSeconds) }}</div>
                                 <div class="text-xs text-gray-500 mb-4">
-                                    {{ houseStats.longCount }} 局異常長，合計佔掉 {{ (houseStats.lostSeconds / 3600 / houseStats.spanHours * 100).toFixed(1) }}% 的營運時間
+                                    {{ houseStats.longCount }} 局異常長<template v-if="houseStats.lostShare !== null">，合計佔掉 {{ houseStats.lostShare.toFixed(1) }}% 的營運時間</template>
                                 </div>
                                 <div class="max-h-[280px] overflow-y-auto -mr-2 pr-2">
                                 <table class="w-full text-xs">
@@ -1730,15 +1772,52 @@
                 const allRounds = ref([]);     // 全部玩家單局, 篩選時間範圍後重新聚合就靠它
 
                 // ===== 時間範圍篩選 =====
-                // 一律用「牆上時間字串」比較 (YYYY-MM-DD)。注單的 Bill Time 沒有時區、
-                // 大盤的 Start Time 帶 +08:00, 若轉成 Date 比較會跟著看報表的人所在時區偏移。
-                const rangeFrom = ref('');  // YYYY-MM-DD, 含當日
-                const rangeTo = ref('');    // YYYY-MM-DD, 含當日
+                // 端點型別 = 19 碼牆上時間字串 'YYYY-MM-DD HH:MM:SS', 或 '' 代表資料還沒載入。
+                // 一律字串比較, 絕不轉 Date —— 注單的 Bill Time 沒有時區、大盤的 Start Time 帶 +08:00,
+                // 轉成 Date 比較會跟著看報表的人所在時區偏移 (與 wallClock 那段註解同源)。
+                // 閉區間: 兩端都含。下界秒補 00、上界秒補 59, 所以「到 03:00」含 03:00:00~03:00:59 整分。
+                const rangeFrom = ref('');
+                const rangeTo = ref('');
+                // 'full' 代表「跟著資料的實際涵蓋範圍」, 換一份 CSV 也永遠合法;
+                // 'exact' 才是使用者自己拉的絕對區間, 換檔後可能落在資料外, 所以還原時要檢查重疊。
+                const rangeMode = ref('full');    // 'full' | 'exact'
+                const rangeRestored = ref(false); // 這次的範圍是從上次的選擇還原來的, UI 要明示
+
+                const p2 = (n) => String(n).padStart(2, '0');
+                const WALL19 = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+
+                // 從 UI 或 localStorage 進來的時間值一律先過這裡, 不要在各比較點分別 replace。
+                // 分隔字元是全檔最隱蔽的地雷: ASCII 上 ' '(0x20) < '0'-'9' < 'T'(0x54),
+                // 拿沒正規化的 'T' 字串去比, index 10 就決勝負且結果恆定 —— 起始邊界吃掉整天、
+                // 結束邊界完全失效, 而且不會拋錯, 只會靜默給出錯誤數字。
+                // secFill 只有兩種用法: 下界 '00'、上界 '59'。上界不補秒會把選中那一分鐘的
+                // 第 1~59 秒靜默排除 ('...03:00:45' > '...03:00' 成立), 下界不補剛好正確 ——
+                // 這種一半對一半錯的狀況最容易被誤判為已經修好。
+                const normWall19 = (v, secFill) => {
+                    const s = String(v == null ? '' : v).trim().replace('T', ' ').slice(0, 16);
+                    const out = s.length === 16 ? s + ':' + secFill : '';
+                    return WALL19.test(out) ? out : '';
+                };
+                // 19 碼 -> <input type="datetime-local"> 的值域 (16 碼帶 T)
+                const toInput16 = (w) => w ? w.replace(' ', 'T').slice(0, 16) : '';
+                // 平移固定毫秒。走 wallClockMs 的「假 epoch」(把牆上時間當成 UTC) 所以不會有時區位移,
+                // 跨月/跨年/閏日交給 Date 處理, 不自己算天數。
+                const wallShift = (w, ms) => {
+                    const t = wallClockMs(w);
+                    if (t === null) return w;
+                    const d = new Date(t + ms);
+                    return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())} `
+                        + `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}`;
+                };
 
                 // 營運日以每天 08:00 換日, 對齊維護時段 —— 凌晨的局歸前一天, 才不會把一個通宵場切成兩半。
+                // 改成精確時間篩選後它不再參與篩選, 只負責「分組」: 排行榜的每日欄、
+                // 玩家的每日卡片、以及 CSV 的日期欄。
                 const DAY_CUTOVER_HOUR = 8;
                 const gamingDay = (wall) => {
-                    if (!wall) return null;
+                    // 長度守門: 傳進 10 碼的純日期會讓 slice(11,13) 變 parseInt('') = NaN,
+                    // 靜默回傳沒位移的結果。寧可回 null 讓呼叫端漏掉, 也不要悄悄錯一天。
+                    if (!wall || String(wall).length < 16) return null;
                     const h = parseInt(wall.slice(11, 13));
                     let t = Date.UTC(+wall.slice(0, 4), +wall.slice(5, 7) - 1, +wall.slice(8, 10));
                     if (h < DAY_CUTOVER_HOUR) t -= 86400000;
@@ -1756,44 +1835,221 @@
                     return [...days].sort();
                 });
 
+                // 精確篩選的值域不能再從 availableDays 推導 —— 那只有天粒度。
+                // billTimeSpan / gameTimeSpan 已經是 19 碼正規形式, 聯集起來就是
+                // rangeIsFull、輸入框的 min/max、預設範圍、還原時的 clamp、部分時段判斷
+                // 這五件事的共同基準; 用同一個來源才不會五處各算一套而互相打架。
+                // 從「現在還在記憶體裡的資料」推導, 跟 availableDays 同一個來源。
+                // 不能用 billTimeSpan / gameTimeSpan: 那兩個 ref 每次匯入都被無條件覆寫(缺哪一種就寫 null),
+                // 但 allRounds / gameResultsData 只在該種 CSV 真的解析成功時才替換。
+                // 於是「先匯入注單、再單獨匯入大盤」會讓 span 只剩大盤那一段, 而留著的幾萬筆注單全在範圍外 ——
+                // 範圍會判定為「全部」(所以不篩、也不提示), 每日欄位卻只剩一天, 三處數字互相矛盾。
+                // 這兩個 ref 留給時間差警告用, 那是「這批檔案彼此對不對齊」的問題, 語意不同。
+                const dataSpan = computed(() => {
+                    let min = '', max = '';
+                    const take = (w) => {
+                        if (!w) return;
+                        if (!min || w < min) min = w;
+                        if (!max || w > max) max = w;
+                    };
+                    allRounds.value.forEach(r => take(r.wallTime));
+                    (gameResultsData.value || []).forEach(g => take(wallClock(g['Start Time'])));
+                    return min && max ? { min, max } : null;
+                });
+                const dayStart19 = (d) => `${d} ${p2(DAY_CUTOVER_HOUR)}:00:00`;
+                const dayEnd19 = (d) => wallShift(dayStart19(d), 86400000 - 1000);
+
+                // 純寫 ref, 不碰 storage。所有程式化改範圍都走這裡, 一次原子更新兩個值 ——
+                // 分兩次賦值會讓 watch 在中間的 from > to 狀態觸發一次, 篩出 0 筆並把 selectedPlayer 清掉。
+                const applyRange = (from, to) => {
+                    let f = normWall19(from, '00'), t = normWall19(to, '59');
+                    if (f && t && f > t) { const x = f; f = t.slice(0, 16) + ':00'; t = x.slice(0, 16) + ':59'; }
+                    rangeFrom.value = f;
+                    rangeTo.value = t;
+                };
+                // 使用者操作路徑專用: 改範圍並記住意圖。
+                // 還原路徑刻意不走這裡 —— 否則 fallback 的值會把使用者原本的存檔蓋掉。
+                const setRange = (from, to, mode) => {
+                    applyRange(from, to);
+                    rangeRestored.value = false;
+                    rangeMode.value = mode;
+                    store.set('livemines_range_mode', mode);
+                    store.set('livemines_range_from', rangeFrom.value);
+                    store.set('livemines_range_to', rangeTo.value);
+                };
+                // 「全部」。語意要保持純粹 —— 它同時是那顆按鈕的行為, 不能摻進還原邏輯,
+                // 否則使用者按「全部」會被還原成上次的範圍。
+                // 用資料實際的 min/max 而不是 availableDays 的頭尾: 後者是 10 碼日字串,
+                // 當成上界等於該日 00:00, 最後一個營運日的整段凌晨會被靜默切掉。
+                // 純套用資料的完整範圍, 不碰 storage —— 給還原失敗的 fallback 用。
+                // fallback 不是使用者的選擇, 不該把使用者的選擇蓋掉: 存檔留著,
+                // 下次載入涵蓋那段時間的 CSV 時仍然命中得回來。
+                const applyFullRange = () => {
+                    const s = dataSpan.value;
+                    applyRange(s ? s.min : '', s ? s.max : '');
+                    rangeMode.value = 'full';
+                };
                 const resetRange = () => {
-                    const d = availableDays.value;
-                    rangeFrom.value = d.length ? d[0] : '';
-                    rangeTo.value = d.length ? d[d.length - 1] : '';
+                    const s = dataSpan.value;
+                    if (!s) { applyFullRange(); return; }
+                    setRange(s.min, s.max, 'full');
                 };
 
-                // 「最近 N 天」是以資料裡最後一天回推, 不是以今天回推 —— 匯出檔通常不是即時的
-                const setLastDays = (n) => {
-                    const d = availableDays.value;
+                // 資料邊界在「正規化後」的空間裡的樣子。一定要用這個當天花板而不是 dataSpan.max ——
+                // 後者的秒數是真實值(例如 :08), 而 applyRange 會把上界補成 :59, 於是 to > max 永遠成立,
+                // 每按一次 ▶ 視窗就被多拉幾十秒, 連按幾十次會長出半小時。
+                const spanLo = () => { const s = dataSpan.value; return s ? normWall19(s.min, '00') : ''; };
+                const spanHi = () => { const s = dataSpan.value; return s ? normWall19(s.max, '59') : ''; };
+
+                // 保持視窗長度往前/往後平移一整個視窗, 貼到資料邊界就鉗制。
+                // 選好長度後用 ◀▶ 一格一格掃過去, 不必每次重打時間。
+                // 平移量用「整分鐘」算: 閉區間的 :59 讓實際跨度比看起來多 59 秒, 照實際跨度平移的話
+                // 邊界會每按一次就往後爬一分鐘 (12:00→15:00 按一次變成 15:01→18:01), 累積下來很難讀。
+                // 改用整分鐘則邊界保持乾淨, 代價是相鄰兩段共用邊界那一分鐘。
+                const shiftWindow = (dir) => {
+                    const lo = spanLo(), hi = spanHi();
+                    if (!lo || !rangeFrom.value || !rangeTo.value) return;
+                    // 「移動多遠」與「視窗多長」要分開: 視窗只有一分鐘時兩個端點的分鐘相同、span 是 0,
+                    // 拿 0 當移動距離箭頭會亮著卻沒反應, 但拿 60000 當長度又會讓視窗變成兩分鐘。
+                    const span = wallClockMs(rangeTo.value.slice(0, 16) + ':00') - wallClockMs(rangeFrom.value);
+                    const move = span || 60000;
+                    let f = wallShift(rangeFrom.value, dir * move);
+                    if (f < lo) f = lo;
+                    let t = wallShift(f, span);
+                    if (t > hi) { t = hi; f = wallShift(t.slice(0, 16) + ':00', -span); if (f < lo) f = lo; }
+                    setRange(f, t, 'exact');
+                };
+                const canShift = (dir) => {
+                    if (!dataSpan.value || !rangeFrom.value || !rangeTo.value) return false;
+                    return dir < 0 ? rangeFrom.value > spanLo() : rangeTo.value < spanHi();
+                };
+                // 把拉歪的視窗一鍵吸回乾淨的營運日邊界 —— 「精確視窗」與「營運日」兩套語意之間的橋
+                const snapToGamingDays = () => {
+                    const d = rangeDays.value;
                     if (!d.length) return;
-                    rangeFrom.value = d[Math.max(0, d.length - n)];
-                    rangeTo.value = d[d.length - 1];
-                };
-                const isLastDays = (n) => {
-                    const d = availableDays.value;
-                    return d.length > 0
-                        && rangeTo.value === d[d.length - 1]
-                        && rangeFrom.value === d[Math.max(0, d.length - n)];
+                    setRange(dayStart19(d[0]), dayEnd19(d[d.length - 1]), 'exact');
                 };
 
-                // 排行榜要橫向展開的日子 —— 只列目前範圍內的, 這樣縮小範圍就能控制表格寬度
-                const rangeDays = computed(() =>
-                    availableDays.value.filter(d =>
-                        (!rangeFrom.value || d >= rangeFrom.value) && (!rangeTo.value || d <= rangeTo.value)));
+                // 還原上次的選擇。只走 applyRange 不寫 storage: fallback 時存檔留著,
+                // 下次載入涵蓋該範圍的資料時仍能命中原本的意圖。
+                // 一定要 clamp / fallback 而不能盲信存檔 —— 完全不重疊的範圍會讓 inRange 全數 false,
+                // 兩個分頁的數字全部歸零, 而畫面上沒有任何一處會說「是時間範圍造成的」。
+                const restoreRange = () => {
+                    rangeRestored.value = false;
+                    const s = dataSpan.value;
+                    if (!s) { applyFullRange(); return; }
+                    const mode = store.get('livemines_range_mode');
+                    if (mode === 'exact') {
+                        const f = normWall19(store.get('livemines_range_from'), '00');
+                        const t = normWall19(store.get('livemines_range_to'), '59');
+                        if (f && t && f <= t && t >= s.min && f <= s.max) {   // 有重疊才還原
+                            applyRange(f < s.min ? s.min : f, t > s.max ? s.max : t);
+                            rangeMode.value = 'exact';
+                            rangeRestored.value = !rangeIsFull.value;
+                            return;
+                        }
+                    }
+                    applyFullRange();
+                };
 
-                const rangeIsFull = computed(() => {
-                    const d = availableDays.value;
-                    return !d.length || (rangeFrom.value === d[0] && rangeTo.value === d[d.length - 1]);
+                // 排行榜要橫向展開的日子。永遠回傳 10 碼營運日陣列, 絕不可改成回傳 datetime ——
+                // 下游硬綁這個格式 (d.slice(5) 當欄名、player.daily[d] 當 key、CSV 欄名)。
+                // 端點要先用 gamingDay 降階再比: 混長度比較會讓起始那一天整欄消失
+                // ('2026-08-12' >= '2026-08-12 14:30:00' 為 false), 而 p.daily 裡其實有那天的資料。
+                // 降階必須用 gamingDay 而不是 slice(0,10) —— 後者是日曆日, 凌晨的端點會錯一天。
+                const rangeDays = computed(() => {
+                    const f = rangeFrom.value ? gamingDay(rangeFrom.value) : null;
+                    const t = rangeTo.value ? gamingDay(rangeTo.value) : null;
+                    return availableDays.value.filter(d => (!f || d >= f) && (!t || d <= t));
                 });
 
-                // 落在範圍內嗎。比的是「營運日」而非日曆日, 所以 08:00 前的局算前一天。
+                // 這是全檔風險最高的一個判斷: 它同時是 activeRounds 與 houseStats 的效能短路、
+                // 「全部」按鈕的高亮、「已篩選」提示、以及四個匯出標籤的來源。
+                // 必須與 inRange 用同一組邊界值 —— 若誤判成 true, 兩個分頁會直接回傳未篩選的全量資料
+                // 而提示也消失, 錯得徹底且無跡可尋。
+                const rangeIsFull = computed(() => {
+                    const s = dataSpan.value;
+                    if (!s) return true;
+                    if (!rangeFrom.value || !rangeTo.value) return true;  // 半邊空 = 不限制
+                    return rangeFrom.value <= s.min && rangeTo.value >= s.max;
+                });
+
+                // 比的是實際牆上時間, 不再經過 gamingDay —— 那一層在比較前就把時分秒丟掉,
+                // 結構上無法表達不足一天的視窗。玩家側與大盤側都只經由這裡, 改一處兩邊同步生效。
+                // 第一行的空值防護不能漏: r.wallTime 的預設值是 '' 而非 null,
+                // 大盤的 End Time 實測也有空字串; '' 字典序小於任何日期, 沒有下界時會被誤納入。
                 const inRange = (wall) => {
-                    const day = gamingDay(wall);
-                    if (!day) return false;
-                    if (rangeFrom.value && day < rangeFrom.value) return false;
-                    if (rangeTo.value && day > rangeTo.value) return false;
+                    if (!wall) return false;
+                    if (rangeFrom.value && wall < rangeFrom.value) return false;
+                    if (rangeTo.value && wall > rangeTo.value) return false;
                     return true;
                 };
+
+                // 該營運日「實際被資料涵蓋」的區間。要先夾 dataSpan 才不會把資料集頭尾兩天誤標成部分
+                // —— CSV 本身就不是從 08:00 整開始的, 否則選「全部」時也一片琥珀徽章, 警示會被當雜訊忽略。
+                const dayCoverage = (d) => {
+                    const s = dataSpan.value;
+                    if (!s) return null;
+                    const a = dayStart19(d) > s.min ? dayStart19(d) : s.min;
+                    const b = dayEnd19(d) < s.max ? dayEnd19(d) : s.max;
+                    return { a, b };
+                };
+                // 只標記「使用者自己的邊界在切這一天」的情況
+                const isPartialDay = (d) => {
+                    const c = dayCoverage(d);
+                    if (!c) return false;
+                    return (!!rangeFrom.value && rangeFrom.value > c.a) || (!!rangeTo.value && rangeTo.value < c.b);
+                };
+                const dayWindowOf = (d) => {
+                    const c = dayCoverage(d);
+                    if (!c) return '';
+                    const a = rangeFrom.value > c.a ? rangeFrom.value : c.a;
+                    const b = (rangeTo.value && rangeTo.value < c.b) ? rangeTo.value : c.b;
+                    return a.slice(11, 16) + '–' + b.slice(11, 16);
+                };
+                const hasPartialDay = computed(() => rangeDays.value.some(isPartialDay));
+
+                // 畫面上的「部分」徽章只標使用者自己切出來的不完整 —— 資料集頭尾兩天本來就不是
+                // 從 08:00 整開始的, 全部標起來會讓警示被當雜訊。
+                // 但匯出的 CSV 會脫離這個工具流傳, 「是否完整」是一個正面斷言, 標準必須嚴格:
+                // 只有真的涵蓋整個營運日才算完整, 否則同一列的「涵蓋時段」會自相矛盾
+                // (寫著 08:00–11:35 卻標「完整」, 下游拿它當日報用就錯了)。
+                const dayCoveredFully = (d) => {
+                    const s = dataSpan.value;
+                    if (!s) return false;
+                    const lo = (rangeFrom.value && rangeFrom.value > s.min) ? rangeFrom.value : s.min;
+                    const hi = (rangeTo.value && rangeTo.value < s.max) ? rangeTo.value : s.max;
+                    return lo <= dayStart19(d) && hi >= dayEnd19(d);
+                };
+
+                // UI 值域 (16 碼帶 T) 與內部值域 (19 碼帶空格) 的唯一轉換點。
+                // 搭配 v-model.lazy: 逐位打年份時會依序產生 0002/0020/0202/2026 四個合法值,
+                // 若在這裡 clamp 到 dataSpan, 第一個數字打完就被彈回 min, 使用者根本打不完。
+                // 所以這裡不 clamp, 只做「你剛動的那一邊贏, 另一邊跟隨」—— 不靜默互換,
+                // 也不留下 from > to 的非法狀態。手打超出資料範圍只會得到「此範圍 0 筆」, 那是可見的回饋。
+                // 原生控件允許把值變成空字串(使用者想重打就會先清空), 而 Chrome 在那一瞬間就發 change。
+                // 回退到資料邊界會讓使用者挑好的視窗無聲消失且沒有 undo, 所以改成回退到「原本的值」。
+                // inputNonce: getter 是 computed, 若回退值與現值完全相同就沒有任何依賴改變, Vue 不會重繪,
+                // v-model 也不會把值寫回 DOM —— 欄位就一直停在空白, 而篩選其實還在用原本的時間。
+                const inputNonce = ref(0);
+                const rangeFromInput = computed({
+                    get: () => (inputNonce.value, toInput16(rangeFrom.value)),
+                    set: (v) => {
+                        const f = normWall19(v, '00') || rangeFrom.value;
+                        inputNonce.value++;
+                        if (!f) return;
+                        setRange(f, (rangeTo.value && rangeTo.value >= f) ? rangeTo.value : f, 'exact');
+                    }
+                });
+                const rangeToInput = computed({
+                    get: () => (inputNonce.value, toInput16(rangeTo.value)),
+                    set: (v) => {
+                        const t = normWall19(v, '59') || rangeTo.value;
+                        inputNonce.value++;
+                        if (!t) return;
+                        setRange((rangeFrom.value && rangeFrom.value <= t) ? rangeFrom.value : t, t, 'exact');
+                    }
+                });
 
                 const activeRounds = computed(() => {
                     if (rangeIsFull.value) return allRounds.value;
@@ -1812,6 +2068,10 @@
 
                 // 預設門檻在 v0.92 從 10000/2000 調整為 200/50 (舊值幾乎會把所有玩家歸到休閒)。
                 // 提高版本號可清掉瀏覽器裡存的舊門檻, 讓新預設值生效一次; 之後使用者自己調的值照常保留。
+                // 註: 時間範圍的 livemines_range_* 三個 key 刻意不納入版本管轄。它們走讀取端的
+                // 嚴格驗證 (白名單 + 19 碼正則 + 與 dataSpan 的重疊檢查),
+                // 格式不合的舊值自然過不了; 而這個 block 是點名 remove 兩個門檻 key,
+                // 升版號會白白清掉使用者自己調過的門檻。
                 const SETTINGS_VERSION = '2';
                 if (store.get('livemines_settings_version') !== SETTINGS_VERSION) {
                     store.remove('livemines_high_threshold');
@@ -2042,11 +2302,32 @@
                     setTimeout(() => URL.revokeObjectURL(url), 1000);
                 };
 
-                const exportScopeLabel = () => selectedDay.value ? selectedDay.value : (rangeIsFull.value ? '全部' : rangeFrom.value + '_' + rangeTo.value);
+                // 範圍的三種寫法。刻意分家: 檔名要無冒號無空白才反解得回來(三個 sanitizer 只會把
+                // ':' 換成 '_', 而 '_' 同時是欄位分隔符, 換完根本讀不出邊界);
+                // 畫在 PNG 上的圖說要短(畫布在區間數少時只有 400 多 px 可用寬度, 會靜默截斷);
+                // CSV 的值要完整無歧義, 因為它會被貼進報表、脫離這個工具流傳。
+                const mdOf = (w) => w.slice(5, 7) + '/' + w.slice(8, 10);
+                const mdhmOf = (w) => mdOf(w) + ' ' + w.slice(11, 16);
+                const fstampOf = (w) => w.slice(5, 7) + w.slice(8, 10) + '-' + w.slice(11, 13) + w.slice(14, 16);
+                const rangeIncomplete = () => rangeIsFull.value || !rangeFrom.value || !rangeTo.value;
+                const rangeStamp = () => rangeIncomplete() ? '全部日期' : fstampOf(rangeFrom.value) + '_' + fstampOf(rangeTo.value);
+                const rangeTextShort = () => rangeIncomplete() ? '全部日期' : mdhmOf(rangeFrom.value) + ' ~ ' + mdhmOf(rangeTo.value);
+                const rangeTextFull = () => rangeIncomplete() ? '全部日期' : rangeFrom.value + ' ~ ' + rangeTo.value;
+                // 某個營運日與目前範圍的交集。selectedDay 分支原本回傳裸日期,
+                // 於是檔名與 CSV 的「資料範圍」欄都聲稱這是完整營運日, 實際可能只有幾小時 ——
+                // 而這份 CSV 是唯一會把錯誤資訊帶出系統邊界的東西。
+                const dayStampOf = (d) => {
+                    const c = dayCoverage(d);
+                    if (!c) return d;
+                    const a = rangeFrom.value > c.a ? rangeFrom.value : c.a;
+                    const b = (rangeTo.value && rangeTo.value < c.b) ? rangeTo.value : c.b;
+                    return fstampOf(a) + '_' + fstampOf(b);
+                };
+                const exportScopeLabel = () => selectedDay.value ? dayStampOf(selectedDay.value) : rangeStamp();
                 const exportFileName = (kind) => {
                     const p = selectedPlayer.value;
                     const who = nicknameOf(p) || p.account.slice(0, 8);
-                    return `玩家_${who}_${exportScopeLabel()}_${kind}.csv`.replace(/[\/:*?"<>|]/g, '_');
+                    return `玩家_${who}_${exportScopeLabel()}_${kind}.csv`.replace(/[\\/:*?"<>|]/g, '_');
                 };
 
                 // 每局明細: 最原始可用的一列一局, PO 要自己做樞紐分析就是靠這份
@@ -2074,7 +2355,13 @@
                     [
                         ['帳號', base.account], ['暱稱', nicknameOf(base) || ''],
                         ['所有記錄過的暱稱', nicknamesOf(base).join(' / ')],
-                        ['分群', base.segment || ''], ['資料範圍', exportScopeLabel()],
+                        ['分群', base.segment || ''],
+                        ['資料範圍', selectedDay.value ? (selectedDay.value + ' ' + dayWindowOf(selectedDay.value)) : rangeTextFull()],
+                        // 選了單日卡片時這一列要描述那一天, 不是整個時間範圍 ——
+                        // 否則「匯出的是完整的 08-15」會因為範圍另一端切在 08-17 而被標成「否」
+                        ['是否完整營運日', selectedDay.value
+                            ? (dayCoveredFully(selectedDay.value) ? '是' : '否(部分時段)')
+                            : (rangeDays.value.every(dayCoveredFully) ? '是' : '否(部分時段)')],
                         ['總流水', p.totalTurnover], ['總派彩', p.totalPayout], ['玩家盈虧', p.winLoss],
                         ['RTP(%)', p.rtp.toFixed(2)], ['總參與局數', p.roundsCount],
                         ['Hit Rate(%)', pct(p.totalHitRounds, p.roundsCount)],
@@ -2090,10 +2377,17 @@
 
                     rows.push([]);
                     rows.push(['# 每日明細']);
-                    rows.push(['營運日', '局數', '投注額', '初始餘額', '結束餘額', '餘額變化']);
+                    // 欄名寫「涵蓋時段/是否完整」是必要的: 選了不足一天的視窗時, 餘額是視窗端點的快照
+                    // 而不是當日開收, 但數字看起來完全合理 —— 下游做樞紐分析的人會把幾小時的數字當日報用。
+                    rows.push(['營運日', '涵蓋時段', '是否完整', '局數', '投注額', '區間初始餘額', '區間結束餘額', '餘額變化']);
                     Object.keys(p.daily).sort().forEach(d => {
                         const x = p.daily[d];
-                        rows.push([d, x.rounds, x.bet, x.open, x.close, (x.close || 0) - (x.open || 0)]);
+                        // 用明確的 null 判斷而不是 ||, 否則合法的餘額 0 會跟「沒有快照」混為一談。
+                        // 相減會帶出浮點誤差 (3956.5000000000005), 進到 CSV 很難看, 收到小數兩位。
+                        const delta = (x.open === null || x.close === null)
+                            ? '' : Math.round((x.close - x.open) * 100) / 100;
+                        rows.push([d, dayWindowOf(d), dayCoveredFully(d) ? '完整' : '部分',
+                            x.rounds, x.bet, x.open, x.close, delta]);
                     });
 
                     rows.push([]);
@@ -2133,7 +2427,11 @@
                             day, bet: d.bet, rounds: d.rounds,
                             open: d.open === null ? 0 : d.open,
                             close: d.close === null ? 0 : d.close,
-                            delta: (d.close === null ? 0 : d.close) - (d.open === null ? 0 : d.open)
+                            delta: (d.close === null ? 0 : d.close) - (d.open === null ? 0 : d.open),
+                            // 卡片是使用者判讀初始/結束餘額的唯一介面, 而不足一天的視窗外觀與完整營運日
+                            // 毫無區別。delta 尤其危險: 它是視窗內的餘額變化, 卻被綠/紅上色成當日盈虧走向。
+                            partial: isPartialDay(day),
+                            window: dayWindowOf(day)
                         };
                     });
                 });
@@ -2270,16 +2568,20 @@
                     }
                     p.rounds.push(r);
 
-                    // 逐營運日的投注與餘額。餘額取當日第一筆/最後一筆的快照,
-                    // 所以要依時間決定先後, 不能靠迴圈順序(rounds 尚未排序)。
+                    // 逐營運日的投注與餘額。open/close 是「此範圍內該營運日第一筆/最後一筆」的餘額快照
+                    // —— 過去範圍端點必然落在營運日邊界, 所以它剛好等於當日開收; 能選到時分之後
+                    // 這個近似就失效了, 邊界那一天拿到的是視窗端點的餘額。因此一併記下 firstWall/lastWall,
+                    // 卡片與匯出才有辦法標出「這一天實際只涵蓋 14:30–20:00」。
+                    // 依時間決定先後, 不能靠迴圈順序(rounds 尚未排序)。比字串而不用 r.billTime:
+                    // 後者是 new Date(無時區字串).getTime(), 帶著本機時區的解讀, 不該再往外擴散。
                     const day = gamingDay(r.wallTime);
                     if (day) {
                         let d = p.daily[day];
-                        if (!d) d = p.daily[day] = { bet: 0, rounds: 0, firstT: Infinity, lastT: -Infinity, open: null, close: null };
+                        if (!d) d = p.daily[day] = { bet: 0, rounds: 0, firstWall: '', lastWall: '', open: null, close: null };
                         d.bet += r.bet;
                         d.rounds += 1;
-                        if (r.billTime < d.firstT) { d.firstT = r.billTime; d.open = r.balance; }
-                        if (r.billTime > d.lastT) { d.lastT = r.billTime; d.close = r.balance; }
+                        if (!d.firstWall || r.wallTime < d.firstWall) { d.firstWall = r.wallTime; d.open = r.balance; }
+                        if (!d.lastWall || r.wallTime > d.lastWall) { d.lastWall = r.wallTime; d.close = r.balance; }
                     }
 
                     const g = Math.min(9, r.grids);
@@ -2351,8 +2653,20 @@
                     });
                 };
 
+                // 原本的觸發源是下拉選單(低頻離散)。改成時間輸入框後, 方向鍵微調與 ◀▶ 連按
+                // 都會逐格觸發, 而 rebuildFromRounds 是全量重算(重跑 inRange、每位玩家重新排序與
+                // 算契合度、重算分群、重畫圖表), 十幾萬筆下會明顯卡住。
+                // activeRounds 是 computed 所以「此範圍 N 筆」仍即時更新, 只有重聚合延後。
+                let rangeRebuildTimer = null;
+                // 載入流程自己會呼叫一次 rebuild。watch 預設是 pre-flush(非同步), 會排到下一個
+                // microtask 才跑, 那時 hasData 已經是 true —— 所以「把 restoreRange 放在 hasData 之前」
+                // 並不能省掉重算, 一定要明確擋掉, 否則同一次載入會全量重算兩遍。
+                let skipRangeRebuild = false;
                 watch([rangeFrom, rangeTo], () => {
-                    if (hasData.value) rebuildFromRounds();
+                    if (!hasData.value) return;
+                    if (skipRangeRebuild) { skipRangeRebuild = false; return; }
+                    clearTimeout(rangeRebuildTimer);
+                    rangeRebuildTimer = setTimeout(rebuildFromRounds, 200);
                 });
 
                 const handleFileSelect = async (event) => {
@@ -2529,10 +2843,22 @@
                     if (parsedBills) {
                         allRounds.value = Object.values(groupedRounds);
                         physicalGames.value = uniquePhysicalGames;
+                    }
+
+                    // 只載大盤 CSV 時範圍原本完全不會初始化, rangeIsFull 為 false 卻又什麼都不篩,
+                    // UI 在說謊。所以搬到 if (parsedBills) 外面。
+                    if (parsedBills || parsedGames) {
+                        skipRangeRebuild = true;
+                        restoreRange();
+                    }
+
+                    if (parsedBills) {
                         hasData.value = true;
-                        resetRange();      // 依資料實際涵蓋的日期設定預設範圍
                         rebuildFromRounds();
                     }
+                    // 範圍剛好沒變動時 watch 不會觸發, 旗標得自己收掉, 否則會吃掉使用者的下一次調整。
+                    // watch 的 job 比 nextTick 的 callback 早排隊, 所以這裡一定跑在它後面。
+                    nextTick(() => { skipRangeRebuild = false; });
 
                     isProcessing.value = false;
                 };
@@ -2732,7 +3058,10 @@
 
                 // 分頁是 v-if 切換的, 離開時 canvas 連同整個區塊被銷毀, 切回來是一張全新的空 canvas。
                 // 兩邊的圖都要在切回來時重畫, 否則圖表會憑空消失。
-                watch([activeTab, hasData, hasGameData], ([tab, billReady, gameReady]) => {
+                // 時間範圍也要列進來: houseStats 是 computed 會立刻重算, 但圖表是命令式繪製的。
+                // 少了這一條, 停在大盤分頁改範圍時卡片數字變了、下面兩張圖還是上一個範圍畫的,
+                // 畫面上同時存在兩組互相矛盾的數字, 而範圍卡還寫著「兩個分頁的數字都只計入此範圍」。
+                watch([activeTab, hasData, hasGameData, rangeFrom, rangeTo], ([tab, billReady, gameReady]) => {
                     if (tab === 'player' && billReady) nextTick(renderChart);
                     if (tab === 'house' && gameReady) nextTick(renderHouseCharts);
                 });
@@ -2865,6 +3194,30 @@
                     time: [{ v: 30, t: '每 30 分' }, { v: 60, t: '每 1 小時' }, { v: 180, t: '每 3 小時' }, { v: 360, t: '每 6 小時' }, { v: 1440, t: '每 1 天' }],
                     rounds: [{ v: 30, t: '每 30 局' }, { v: 50, t: '每 50 局' }, { v: 100, t: '每 100 局' }, { v: 250, t: '每 250 局' }, { v: 500, t: '每 500 局' }]
                 };
+                // 顆粒度比視窗本身還長時要停用: 否則選了 5 小時的範圍還能點「每 1 天」,
+                // 會得到單獨一張標成整天的圖, 樣本量遠低於預期而 z 分數被雜訊主導, 卻被當成整天的冷熱結論。
+                // 視窗的實際長度(分鐘)。要 +1 秒: 閉區間的上界秒是 :59, 一個「剛好 N 分鐘」的視窗
+                // 兩端點只差 N-1/60 分, 不補的話整個營運日會算成 1439.98 分而讓「每 1 天」被誤停用。
+                const rangeMinutes = () => {
+                    if (!rangeFrom.value || !rangeTo.value) return 0;
+                    return (wallClockMs(rangeTo.value) - wallClockMs(rangeFrom.value) + 1000) / 60000;
+                };
+                const ballGranDisabled = (v) => {
+                    if (ballGranMode.value !== 'time') return false;
+                    const mins = rangeMinutes();
+                    return mins > 0 && v > mins;
+                };
+                // 只把按鈕變灰不夠 —— ballGranSize 是持久值, 且分桶完全不看 ballGranDisabled。
+                // 範圍縮小後不夾回來的話, 3 小時的視窗會用「每 1 天」分桶: 只有一個桶、標籤是日期、
+                // PNG 副標題也照樣寫「每 1 天」, 而五顆按鈕沒有一顆高亮(停用樣式蓋掉了選中樣式),
+                // 使用者根本看不出圖是用什麼顆粒度畫的。
+                watch([rangeFrom, rangeTo, ballGranMode], () => {
+                    if (ballGranMode.value !== 'time') return;
+                    const mins = rangeMinutes();
+                    if (!mins || !ballGranDisabled(ballGranSize.value)) return;
+                    const fit = BALL_GRAN_OPTIONS.time.filter(o => o.v <= mins);
+                    ballGranSize.value = fit.length ? fit[fit.length - 1].v : BALL_GRAN_OPTIONS.time[0].v;
+                });
 
                 // 發散配色: 低於期望往藍、高於期望往紅、接近期望是白。
                 // 用 z 分數決定濃度而不是原始差值 —— 桶子大小不同時, 同樣的差距意義不一樣,
@@ -2943,9 +3296,23 @@
                     ctx.fillText('落球熱力圖', MARGIN, MARGIN);
                     ctx.fillStyle = '#94a3b8';
                     ctx.font = '13px ' + FONT;
-                    ctx.fillText(gran + '　·　' + (rangeIsFull.value ? '全部日期' : rangeFrom.value + ' ~ ' + rangeTo.value)
-                        + '　·　' + buckets.length + ' 個區間　·　' + hs.rounds.toLocaleString() + ' 局',
-                        MARGIN, MARGIN + 28);
+                    // 畫布寬度是先依卡片格數決定、再補成 16:9 並置中, 所以區間數少時可用寬度只有 400 多 px。
+                    // 副標題加上時分後會變長, 超寬會被靜默切在時間戳中間 —— 先量寬, 太長就縮字再拆兩行。
+                    const sub1 = gran + '　·　' + rangeTextShort();
+                    const sub2 = buckets.length + ' 個區間　·　' + hs.rounds.toLocaleString() + ' 局';
+                    const avail = best.w - MARGIN * 2;
+                    if (ctx.measureText(sub1 + '　·　' + sub2).width <= avail) {
+                        ctx.fillText(sub1 + '　·　' + sub2, MARGIN, MARGIN + 28);
+                    } else {
+                        ctx.font = '11px ' + FONT;
+                        if (ctx.measureText(sub1 + '　·　' + sub2).width <= avail) {
+                            ctx.fillText(sub1 + '　·　' + sub2, MARGIN, MARGIN + 28);
+                        } else {
+                            // TITLE 是 64px, 塞得下第二行 11px
+                            ctx.fillText(sub1, MARGIN, MARGIN + 26);
+                            ctx.fillText(sub2, MARGIN, MARGIN + 42);
+                        }
+                    }
 
                     // 卡片
                     const top0 = MARGIN + TITLE;
@@ -3017,10 +3384,8 @@
                     cv.toBlob((blob) => {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
-                        // 範圍還沒設定時 rangeFrom/rangeTo 是空字串, 直接串接會變成「__」這種檔名
-                        const scope = (rangeIsFull.value || !rangeFrom.value || !rangeTo.value)
-                            ? '全部日期'
-                            : rangeFrom.value + '_' + rangeTo.value;
+                        // rangeStamp 內含「範圍還沒設定就寫全部日期」的守門, 否則會生出「__」這種檔名
+                        const scope = rangeStamp();
                         a.href = url;
                         a.download = ('落球熱力圖_' + gran + '_' + scope + '.png').replace(/[\\/:*?"<>|]/g, '_');
                         document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -3210,7 +3575,7 @@
                         const startWall = String(r['Start Time']).replace('T', ' ').slice(0, 19);
                         const endWall = String(r['End Time']).replace('T', ' ').slice(0, 19);
                         durations.push({
-                            code: r['Game Code'], time: startWall, sec: d,
+                            code: r['Game Code'], time: startWall, sec: d, endWall,
                             // 起或迄落在維護時段就算維護 —— 實測維護會從 06:5x 拖到 09:2x, 不是剛好整點
                             maintenance: inMaintenance(startWall) || inMaintenance(endWall)
                         });
@@ -3223,11 +3588,25 @@
                     const notMaint = allLong.filter(d => !d.maintenance);
                     const longRounds = notMaint.filter(d => !dismissedRounds.value.includes(d.code));
                     const dismissedLong = notMaint.filter(d => dismissedRounds.value.includes(d.code));
-                    const lostSeconds = longRounds.reduce((s, d) => s + (d.sec - medianDur), 0);
-                    const maintenanceSeconds = maintenanceRounds.reduce((s, d) => s + (d.sec - medianDur), 0);
+                    // 損失時間只計「落在視窗內」的那一段。能選到分鐘之後, 視窗很可能切在長局中間 ——
+                    // 拿整局的長度去除以視窗長度會算出超過 100% 的比例。
+                    const clipSec = (d) => {
+                        const a = (rangeFrom.value && d.time < rangeFrom.value) ? rangeFrom.value : d.time;
+                        const b = (rangeTo.value && d.endWall > rangeTo.value) ? rangeTo.value : d.endWall;
+                        const ms = wallClockMs(b) - wallClockMs(a);
+                        return ms > 0 ? ms / 1000 : 0;
+                    };
+                    const excess = (list) => list.reduce((sum, d) => sum + Math.max(0, clipSec(d) - medianDur), 0);
+                    const lostSeconds = excess(longRounds);
+                    const maintenanceSeconds = excess(maintenanceRounds);
 
                     const spanMs = new Date(byTime[byTime.length - 1]['Start Time']) - new Date(byTime[0]['Start Time']);
                     const spanHours = spanMs / 3600000;
+                    // 分母: 有篩選時用「使用者選的視窗長度」, 而不是第一局到最後一局的開始時間差。
+                    // 後者在窄視窗下會小得離譜(視窗裡只剩兩三局時甚至是 0), 算出來的比例會破表或除零。
+                    // 分子已經裁到視窗內, 所以配上視窗長度之後比例在數學上就不可能超過 100%。
+                    const denomHours = rangeIsFull.value ? spanHours : rangeMinutes() / 60;
+                    const lostShare = denomHours > 0 ? Math.min(100, lostSeconds / 3600 / denomHours * 100) : null;
 
                     // --- 落球型態: 每局 3 顆球, 看重複結構與落點 ---
                     // 若是 3 顆獨立均勻抽取(可重複), 理論上 皆不同 504/729、雙同 216/729、三同 9/729。
@@ -3395,7 +3774,7 @@
                         cumulative, settleAt, midPoint,
                         bettime, endtime, betPlayer, convMedian, zeroBetRounds, roundsUp, roundsDown,
                         approvedRounds: approved.length,
-                        medianDur, longRounds, longCount: longRounds.length, lostSeconds,
+                        medianDur, longRounds, longCount: longRounds.length, lostSeconds, lostShare,
                         maintenanceCount: maintenanceRounds.length, maintenanceSeconds,
                         dismissedLong
                     };
@@ -3496,7 +3875,11 @@
                 const exportPlayerList = () => {
                     const days = rangeDays.value;
                     const head = ['帳號', '暱稱', '分群', '總流水', '總派彩', '玩家盈虧', 'RTP(%)', '遊玩局數', '契合度', '契合度可評估局數'];
-                    days.forEach(d => head.push(d + ' 投注', d + ' 初始餘額', d + ' 結束餘額'));
+                    // 欄名只寫日期而內容是部分區間, 會讓拿到檔案的人直接把幾小時的數字當日報用
+                    days.forEach(d => {
+                        const sfx = isPartialDay(d) ? '(部分 ' + dayWindowOf(d) + ')' : '';
+                        head.push(d + sfx + ' 投注', d + sfx + ' 區間初始餘額', d + sfx + ' 區間結束餘額');
+                    });
                     const rows = [head];
                     filteredPlayers.value.forEach(p => {
                         const row = [p.account, nicknameOf(p) || '', p.segment || '',
@@ -3509,8 +3892,8 @@
                         rows.push(row);
                     });
                     const scope = [segmentFilter.value || '全分群', playerSearch.value.trim() || '無關鍵字',
-                        rangeIsFull.value ? '全部日期' : rangeFrom.value + '_' + rangeTo.value].join('_');
-                    downloadCsv(('玩家列表_' + scope + '.csv').replace(/[\/:*?"<>|]/g, '_'), rows);
+                        rangeStamp()].join('_');
+                    downloadCsv(('玩家列表_' + scope + '.csv').replace(/[\\/:*?"<>|]/g, '_'), rows);
                 };
 
                 // 把帳號拆成 [未命中, 命中, 未命中...] 好在表格裡標出比對到的位置
@@ -3701,8 +4084,10 @@
                     ballGranMode, ballGranSize, ballGranOptions: BALL_GRAN_OPTIONS, divergingCell, exportBallHeatmapPng, showHeatmapModal,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
+                    rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16,
+                    shiftWindow, canShift, snapToGamingDays,
+                    isPartialDay, dayWindowOf, dayCoveredFully, hasPartialDay, rangeTextShort, ballGranDisabled,
                     dayCutoverHour: DAY_CUTOVER_HOUR,
-                    setLastDays, isLastDays,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
