@@ -175,7 +175,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.42</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.43</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -675,10 +675,17 @@
                     <div class="text-xs text-gray-500 font-mono mt-1">{{ selectedPlayer.account }}</div>
                     <div v-if="nicknameEntriesOf(selectedPlayer).length > 1" class="text-xs text-gray-500 mt-1">
                         此帳號記錄過 {{ nicknameEntriesOf(selectedPlayer).length }} 個暱稱：
-                        <span v-for="(n, i) in nicknameEntriesOf(selectedPlayer)" :key="n.name" class="mr-2">
+                        <span v-for="(n, i) in nicknameEntriesOf(selectedPlayer).slice(0, NICK_PREVIEW)" :key="n.name" class="mr-2">
                             <span :class="i === 0 ? 'text-indigo-300 font-bold' : 'text-gray-400'">{{ n.name }}</span>
                             <span v-if="n.last" class="text-gray-600">({{ nickTime(n.last).slice(0, 10) }})</span>
                         </span>
+                        <button @click="showNicknameModal = true"
+                            class="text-indigo-300 hover:text-white underline decoration-dotted underline-offset-2 transition-colors">
+                            <template v-if="nicknameEntriesOf(selectedPlayer).length > NICK_PREVIEW">
+                                還有 {{ nicknameEntriesOf(selectedPlayer).length - NICK_PREVIEW }} 個…
+                            </template>
+                            <template v-else>查看完整紀錄</template>
+                        </button>
                     </div>
                 </div>
                 <div class="p-6 flex flex-col lg:flex-row gap-6 items-start">
@@ -863,6 +870,52 @@
             </div>
         </div>
 
+
+
+        <!-- 暱稱變更紀錄 -->
+        <div v-if="showNicknameModal && selectedPlayer" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
+            <div class="glass rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col relative">
+                <button @click="showNicknameModal = false"
+                    class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-10">✕</button>
+
+                <div class="px-6 py-4 border-b border-white/10 shrink-0">
+                    <h3 class="text-lg font-bold text-white">暱稱變更紀錄</h3>
+                    <div class="text-xs text-gray-500 font-mono mt-1">{{ selectedPlayer.account }}</div>
+                    <div class="text-xs text-gray-400 mt-1">
+                        共 {{ nicknameEntriesOf(selectedPlayer).length }} 個，由新到舊
+                    </div>
+                </div>
+
+                <div class="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-gray-500 text-left border-b border-white/10">
+                                <th class="py-2 w-8"></th>
+                                <th class="py-2">最後使用時間</th>
+                                <th class="py-2">暱稱</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(n, i) in nicknameEntriesOf(selectedPlayer)" :key="n.name + i"
+                                class="border-b border-white/5">
+                                <td class="py-2 text-[10px] text-gray-600">{{ i + 1 }}</td>
+                                <td class="py-2 font-mono text-xs" :class="i === 0 ? 'text-gray-300' : 'text-gray-500'">
+                                    {{ n.last ? nickTime(n.last) : '—' }}
+                                </td>
+                                <td class="py-2">
+                                    <span :class="i === 0 ? 'text-indigo-300 font-bold' : 'text-gray-400'">{{ n.name }}</span>
+                                    <span v-if="i === 0" class="text-[10px] text-indigo-400 border border-indigo-400/40 rounded px-1 py-px ml-2">現用</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="text-[10px] text-gray-500 mt-4 leading-relaxed">
+                        時間是該暱稱最後一次被使用的時刻，取自暱稱對照檔。沒有時間的項目來自舊格式的對照檔，
+                        當時只記錄名稱、沒有記錄時間。
+                    </p>
+                </div>
+            </div>
+        </div>
 
         <!-- 落球熱力圖 放大檢視 -->
         <div v-if="showHeatmapModal && houseStats" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
@@ -1694,6 +1747,8 @@
                 // ===== 押注變化圖: 把玩家的局依「每 N 局」或「每 N 分鐘」分桶 =====
                 const showBetTrendModal = ref(false);
                 const showHeatmapModal = ref(false);  // 落球熱力圖的放大檢視
+                const showNicknameModal = ref(false); // 暱稱變更紀錄
+                const NICK_PREVIEW = 7;               // 標題列最多先列幾個暱稱
                 // 顆粒度記住上次的選擇 —— 每次開圖都要重設很煩
                 const savedTrendMode = store.get('livemines_trend_mode');
                 const savedTrendSize = parseInt(store.get('livemines_trend_size'));
@@ -1952,7 +2007,7 @@
 
                 // 點某一天的卡片時, 左側統計只算那天 —— null 代表看全部
                 const selectedDay = ref(null);
-                watch(selectedPlayer, () => { selectedDay.value = null; });
+                watch(selectedPlayer, () => { selectedDay.value = null; showNicknameModal.value = false; });
 
                 const playerView = computed(() => {
                     const p = selectedPlayer.value;
@@ -1993,8 +2048,8 @@
                 });
 
 
-                watch([selectedPlayer, showChartModal, showBetTrendModal, showHeatmapModal], ([player, chart, trend, heat]) => {
-                    if (player || chart || trend || heat) {
+                watch([selectedPlayer, showChartModal, showBetTrendModal, showHeatmapModal, showNicknameModal], ([player, chart, trend, heat, nick]) => {
+                    if (player || chart || trend || heat || nick) {
                         document.body.style.overflow = 'hidden';
                     } else {
                         document.body.style.overflow = '';
@@ -3498,7 +3553,7 @@
                     handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
-                    nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, nicknameCount, nicknameMap, playersMap, physicalGames,
+                    nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
                     matchedAlias, placePreference,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
