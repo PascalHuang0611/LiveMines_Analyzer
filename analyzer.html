@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.65</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.66</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -484,10 +484,17 @@
                     <div
                         class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-bl-full -z-10">
                     </div>
-                    <h3 class="text-xl font-bold mb-4"
-                        :class="{'text-indigo-400': seg==='高價值玩家', 'text-cyan-400': seg==='中階玩家', 'text-gray-400': seg==='休閒玩家', 'text-emerald-400': seg==='全站'}">
-                        {{ seg }}
-                    </h3>
+                    <div class="flex items-center justify-between gap-2 mb-4">
+                        <h3 class="text-xl font-bold"
+                            :class="{'text-indigo-400': seg==='高價值玩家', 'text-cyan-400': seg==='中階玩家', 'text-gray-400': seg==='休閒玩家', 'text-emerald-400': seg==='全站'}">
+                            {{ seg }}
+                        </h3>
+                        <!-- 卡片右上角本來只有一塊裝飾漸層(-z-10), 鈕放在正常流裡就會蓋在它上面,
+                             不必動用絕對定位去跟那塊漸層搶位置, 也不會壓到「排行榜篩選中」那個標籤。 -->
+                        <button @click="openDailyTrend(seg)"
+                            class="text-[10px] text-indigo-300 hover:text-white border border-indigo-400/30 hover:bg-indigo-500/20 rounded px-1.5 py-0.5 transition-colors shrink-0"
+                            :title="`打開 ${seg} 的逐日 RTP 走勢`">逐日走勢 ↗</button>
+                    </div>
                     <div class="text-3xl font-extrabold mb-1">{{ clusterStats[seg]?.count.toLocaleString() || 0 }} <span
                             class="text-sm font-normal text-gray-400">人</span>
                         <span v-if="segmentFilter === seg" class="text-[10px] font-normal text-indigo-300 border border-indigo-400/50 rounded px-1.5 py-0.5 ml-2 align-middle"
@@ -1254,6 +1261,82 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         沒有列出「Win Rate」：單一格的最低賠率是 2 倍，所以只要命中就必然獲利，Win Rate 會恆等於 Hit Rate。<br>
                         沒有列出「平均單局押注格數」：那是一局的性質，不是一格的性質。
                     </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 逐日 RTP 走勢。上折線看總量怎麼走, 下堆疊柱看那個總量是由誰貢獻的 ——
+             柱高就是當日 RTP(五項相加 = RTP), 所以兩張圖講的是同一件事的兩面。
+             共用一個橫向捲動容器, 而且兩張圖的 y 軸寬度鎖死在 54px, 同一天才會上下對齊。 -->
+        <div v-if="dailyTrendSeg" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+            <div class="glass rounded-2xl w-full max-w-[1200px] my-auto relative">
+                <button @click="closeDailyTrend"
+                    class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-10">✕</button>
+
+                <div class="px-6 py-4 border-b border-white/10">
+                    <div class="flex flex-wrap items-center gap-3 mb-1 pr-10">
+                        <h3 class="text-xl font-bold text-white">
+                            逐日 RTP 走勢 ·
+                            <span :class="{'text-indigo-400': dailyTrendSeg==='高價值玩家', 'text-cyan-400': dailyTrendSeg==='中階玩家', 'text-gray-400': dailyTrendSeg==='休閒玩家', 'text-emerald-400': dailyTrendSeg==='全站'}">{{ dailyTrendSeg }}</span>
+                        </h3>
+                        <div class="flex rounded overflow-hidden border border-white/10">
+                            <button v-for="v in compSingleViews" :key="v.k" @click="dailyTrendView = v.k"
+                                class="px-3 py-1 text-xs transition-colors"
+                                :class="dailyTrendView === v.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">{{ v.t }}</button>
+                        </div>
+                        <span class="text-[11px] text-gray-500">{{ dayBoundaryDecl }}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">
+                        分母是該日該群的總投注（含 EXBET 加購費），跟卡片上的群體 RTP 同一個口徑，
+                        所以這裡每一天的數字可以直接跟卡片比。
+                        <span class="text-gray-600">跟著上方的時間範圍、分群門檻與換日設定走；開啟時才計算，所以第一次會等一下。</span>
+                    </p>
+                </div>
+
+                <div class="p-6">
+                    <div v-if="!dailyTrendRows.length" class="text-xs text-gray-500 py-24 text-center">計算中…</div>
+                    <template v-else>
+                        <div class="mb-4 text-xs bg-slate-900/60 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1">
+                            <span class="text-gray-400">{{ dailyTrendTotal.days }} 天<span
+                                v-if="dailyTrendTotal.withData < dailyTrendTotal.days" class="text-gray-600 ml-1"
+                                title="這個視角在其中幾天完全沒有局，折線在那裡會斷開">（{{ dailyTrendTotal.withData }} 天有資料）</span></span>
+                            <span class="text-gray-400">區間平均 RTP
+                                <span class="font-mono font-bold ml-1" :class="dailyTrendTotal.rtp >= 100 ? 'text-red-400' : 'text-green-400'">
+                                    {{ dailyTrendTotal.rtp.toFixed(2) }}%</span></span>
+                            <span class="text-gray-400">總投注
+                                <span class="font-mono text-white ml-1">{{ formatMoney(dailyTrendTotal.bet) }}</span></span>
+                            <span class="text-gray-400">總派彩
+                                <span class="font-mono text-gray-300 ml-1">{{ formatMoney(dailyTrendTotal.payout) }}</span></span>
+                            <span class="text-gray-400">{{ dailyTrendTotal.rounds.toLocaleString() }} 人次</span>
+                            <span v-if="dailyTrendScrolls" class="text-indigo-300/80">天數較多，圖表可左右捲動 →</span>
+                            <!-- 對帳: 逐日加總理應等於卡片上同一視角的群體 RTP。相等時只低調寫一句,
+                                 對不上就跳出來 —— 這是「逐日算錯了」唯一會露出馬腳的地方。 -->
+                            <span v-if="dailyTrendTotal.cardRtp !== null && !dailyTrendTotal.mismatch" class="text-gray-600"
+                                title="逐日加總與卡片上同一視角的群體 RTP 相符">＝ 卡片的群體 RTP ✓</span>
+                            <span v-else-if="dailyTrendTotal.mismatch" class="text-amber-400"
+                                title="逐日加總與卡片的群體 RTP 對不上，代表其中一邊算錯了">
+                                與卡片的群體 RTP 對不上（卡片 {{ dailyTrendTotal.cardRtp.toFixed(2) }}%）
+                            </span>
+                        </div>
+
+                        <!-- 兩張圖放在同一個捲動容器裡, 分開捲會失去「同一天上下對照」的意義 -->
+                        <div class="overflow-x-auto pb-2">
+                            <div :style="{ minWidth: dailyTrendMinWidth + 'px' }">
+                                <div class="text-xs text-gray-400 mb-1">每日 RTP<span class="text-gray-600 ml-2">虛線為區間平均；空心點代表那一天只涵蓋部分時段</span></div>
+                                <div class="h-64"><canvas id="trendRtpChart"></canvas></div>
+                                <div class="text-xs text-gray-400 mt-5 mb-1">每日 RTP 組成<span class="text-gray-600 ml-2">柱高＝當日 RTP，與上圖同一條線</span></div>
+                                <div class="h-64"><canvas id="trendCompChart"></canvas></div>
+                            </div>
+                        </div>
+
+                        <p class="text-[11px] text-gray-500 mt-4 leading-relaxed">
+                            五項組成的分母跟當日 RTP 同一個，所以堆疊起來的柱高就是當日 RTP —— 上圖的折線與下圖的柱頂是同一組數字。<br>
+                            範圍邊界切在某一天中間時，那一天只涵蓋部分時段（折線上標成空心點）。RTP 是比值，不會因為時段短而系統性偏高或偏低，
+                            但局數少、上下跳動會比較大，看的時候把游標移上去確認人次。<br>
+                            日期軸跟排行榜的每日欄是同一組日子。某一天在這個視角完全沒有局時折線會斷開，不會畫成 0% —— 0% 會被讀成「那天全被莊家收走」。<br>
+                            沒有畫「二級玩法的分層存活率」：那是整個範圍才有足夠樣本的東西，切到單日之後每層只剩幾十筆，畫出來的是雜訊。
+                        </p>
+                    </template>
                 </div>
             </div>
         </div>
@@ -2509,6 +2592,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 盤面押注偏好的逐格明細。存分群名稱而不是布林 —— 一次只看一群, 而且要知道是哪一群。
                 // 跟其他 modal 旗標放在一起, 是為了讓下面那個捲動鎖的清單好維護。
                 const cellDetailSeg = ref(null);
+                // 逐日 RTP 走勢。同樣存分群名稱而不是布林 —— 一次只看一群, 而且要知道是哪一群。
+                const dailyTrendSeg = ref(null);
                 const showRtpTargetAll = ref(false);  // 拉高 RTP 的局: 展開全部
                 const NICK_PREVIEW = 7;               // 標題列最多先列幾個暱稱
                 // 顆粒度記住上次的選擇 —— 每次開圖都要重設很煩
@@ -2860,7 +2945,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // (來源陣列、解構參數、if 條件), 漏改任一處就失效; 改成 some(Boolean) 只剩一處要維護。
                 // 實際上就漏過一次: 逐格明細的 cellDetailSeg 加進來之前, 開著它捲動並沒有被鎖住。
                 const MODAL_FLAGS = [selectedPlayer, showChartModal, showBetTrendModal,
-                    showHeatmapModal, showNicknameModal, cellDetailSeg];
+                    showHeatmapModal, showNicknameModal, cellDetailSeg, dailyTrendSeg];
                 watch(MODAL_FLAGS, (vals) => {
                     document.body.style.overflow = vals.some(Boolean) ? 'hidden' : '';
                 });
@@ -3983,6 +4068,278 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         setTimeout(() => URL.revokeObjectURL(url), 1000);
                     }, 'image/png');
                 };
+
+                // ===== 逐日 RTP 走勢 =====
+                // 卡片上的 comp 是「整個範圍」的一顆總數, 沒有日期維度, 所以逐日只能重掃一次 rounds。
+                // 好在 round 物件解析時就已經把五項組成金額算好放在身上(wBase/wFree/wPaid/wJp/wBonus),
+                // 不必碰 bill 層那幾條平行陣列(那是逐「格」才需要的維度, 而且列數多一倍)。
+                //
+                // 分母用 r.bet, 它在解析時是無條件累加的(含 Bet Place 10 那列的 EXBET 加購費),
+                // 所以這裡的每日 RTP 跟卡片上的群體 RTP 是同一個口徑, 兩邊可以直接對照 —— 摘要列就是在對這個。
+                const dailyTrendView = ref('all');     // 自己的視角, 刻意跟卡片那排的 compView 分開
+                const dailyTrend = ref(null);
+                let trendRtpChart = null, trendCompChart = null;
+
+                // 日界一定要進 stamp —— 它決定每一局落在哪一天, 換了口徑整張圖都不一樣。
+                // 這是 cellStamp 沒有的維度(逐格明細不分日, 換日界不影響它), 漏掉就會拿
+                // 08:00 換日的分桶配 00:00 換日的標籤, 而且沒有任何錯誤訊息。
+                const dailyTrendStamp = () =>
+                    `${rangeFrom.value}|${rangeTo.value}|${highValueThreshold.value}|${midValueThreshold.value}|${dayMode.value}|${dataGen}`;
+
+                // 逐日只要五個分子 + 分母, 不帶 bonusLv / bonusReach / bonusBomb 那三條陣列。
+                // 那三條是「二級玩法分層存活率」用的, 逐日走勢不畫它們。
+                const blankDayComp = () => ({ bet: 0, payout: 0, base: 0, free: 0, paid: 0, jp: 0, bonus: 0, rounds: 0 });
+                // 欄位先在迴圈裡拆成區域變數再傳進來: r 是 reactive proxy, 每次屬性讀取都要過一層攔截,
+                // 而每一局要累四次(自己的群 x 全體/該視角, 再加全站的兩份)。拆一次 7 個欄位,
+                // 比四次各讀七個少掉 21 次 proxy get。
+                const bumpDayComp = (c, bet, pay, wb, wf, wp, wj, wn) => {
+                    c.bet += bet; c.payout += pay; c.rounds += 1;
+                    c.base += wb; c.free += wf; c.paid += wp; c.jp += wj; c.bonus += wn;
+                };
+
+                const computeDailyTrend = () => {
+                    const rounds = allRounds.value;
+                    const players = playersMap.value || {};
+                    const full = rangeIsFull.value;
+                    // 日期軸用 rangeDays 而不是「掃到哪幾天就是哪幾天」: 後者會讓完全沒人玩的那一天
+                    // 從軸上靜默消失, 圖看起來就像 08-15 的隔天是 08-17。用 rangeDays 還有一個好處 ——
+                    // 跟排行榜的每日欄是同一組日子、同一個順序, 兩邊可以並著看。
+                    const days = rangeDays.value;
+                    const dayIdx = new Map(); days.forEach((d, i) => dayIdx.set(d, i));
+                    const SEG_KEYS = SEGS.concat(['全站']);
+                    const segs = {};
+                    SEG_KEYS.forEach(sg => {
+                        segs[sg] = {};
+                        ['all', 'ex', 'plain'].forEach(v => { segs[sg][v] = days.map(blankDayComp); });
+                    });
+
+                    // dayKeyOf 每次都跑 Date.UTC + new Date + padStart, 掃百萬局太貴。
+                    // 同一個「日期+小時」必定對到同一天, 所以用前 13 碼當快取鍵, 最多 天數x24 筆。
+                    // 一定要委派給 dayKeyOf 而不是自己 slice(0,10) —— 後者是日曆日,
+                    // 換日點設在 08:00 時凌晨那幾局會被算錯一天。
+                    const dayMemo = new Map();
+                    const dayOf = (wall) => {
+                        if (!wall || wall.length < 16) return null;
+                        const k = wall.slice(0, 13);
+                        let d = dayMemo.get(k);
+                        if (d === undefined) { d = dayKeyOf(wall); dayMemo.set(k, d); }
+                        return d;
+                    };
+
+                    let outside = 0;   // 落在 rangeDays 之外的局, 正常應為 0
+                    const n = rounds.length;
+                    for (let i = 0; i < n; i++) {
+                        const r = rounds[i];
+                        if (!full && !inRange(r.wallTime)) continue;
+                        const p = players[r.account];
+                        if (!p || !segs[p.segment]) continue;
+                        const di = dayIdx.get(dayOf(r.wallTime));
+                        if (di === undefined) { outside++; continue; }
+                        const bet = r.bet, pay = r.payout;
+                        const wb = r.wBase || 0, wf = r.wFree || 0, wp = r.wPaid || 0,
+                              wj = r.wJp || 0, wn = r.wBonus || 0;
+                        // 判定照抄 addRoundToAgg: 舊匯出檔會掉 Bet Place 10 那一列, 只看 exbetCount
+                        // 會把那幾局歸進「沒買」卻帶著付費閃電的派彩。
+                        const vk = (r.exbetCount > 0 || r.hasExtra) ? 'ex' : 'plain';
+                        // 累到自己的分群與「全站」。每位玩家只屬於一個分群, 所以不會重複計數。
+                        const own = segs[p.segment], all = segs['全站'];
+                        bumpDayComp(own.all[di], bet, pay, wb, wf, wp, wj, wn);
+                        bumpDayComp(own[vk][di], bet, pay, wb, wf, wp, wj, wn);
+                        bumpDayComp(all.all[di], bet, pay, wb, wf, wp, wj, wn);
+                        bumpDayComp(all[vk][di], bet, pay, wb, wf, wp, wj, wn);
+                    }
+                    dailyTrend.value = { stamp: dailyTrendStamp(), days, segs, outside };
+                };
+
+                // 分群必須先是這個範圍的: playerStale 為 true 時 p.segment 還是上一個範圍算出來的,
+                // 直接掃會拿「上一個範圍的分群」配「這個範圍的日子」—— 沒有錯誤訊息的靜默錯答案。
+                // runWithProgress 的 pendingWork 會把這件事排到重聚合之後。
+                const openDailyTrend = (seg) => {
+                    dailyTrendSeg.value = seg;
+                    if (playerStale.value && hasData.value) rebuildWithProgress();
+                    if (!dailyTrend.value || dailyTrend.value.stamp !== dailyTrendStamp())
+                        runWithProgress(computeDailyTrend, '計算逐日走勢');
+                };
+                const closeDailyTrend = () => { dailyTrendSeg.value = null; };
+
+                // 每一天一列。parts 的分母跟 rtp 同一個, 所以五項相加就等於當日 RTP ——
+                // 堆疊圖的柱高因此正好是那天的 RTP, 兩張圖可以直接對照著看。
+                // 那一天那個視角完全沒有局時 rtp 是 null 而不是 0: 0% 會被讀成「那天全輸給莊家」,
+                // 折線也會被拉到底。null 讓 Chart.js 斷線, 那才是「沒有資料」該有的樣子。
+                const dailyTrendRows = computed(() => {
+                    const dt = dailyTrend.value, seg = dailyTrendSeg.value;
+                    if (!dt || !seg || !dt.segs[seg]) return [];
+                    const comps = dt.segs[seg][dailyTrendView.value] || [];
+                    return dt.days.map((day, i) => {
+                        const c = comps[i];
+                        const has = !!c && c.bet > 0;
+                        return {
+                            day, empty: !has,
+                            bet: has ? c.bet : 0, payout: has ? c.payout : 0, rounds: has ? c.rounds : 0,
+                            rtp: has ? c.payout / c.bet * 100 : null,
+                            partial: isPartialDay(day), window: dayWindowOf(day),
+                            parts: has ? COMP_PARTS.map(x => ({ ...x, pct: c[x.k] / c.bet * 100 })) : null
+                        };
+                    });
+                });
+
+                // 摘要 + 對帳。合計刻意重新加總逐日而不是直接讀 clusterStats: 兩者本來就該相等,
+                // 用同一份資料算出來的基準線才保證跟柱子對得上; 而把卡片那份也擺出來比,
+                // 就等於每次開圖都在對一次帳 —— 對不上就是這裡算錯了, 不會靜默混過去。
+                const dailyTrendTotal = computed(() => {
+                    const rows = dailyTrendRows.value;
+                    let bet = 0, payout = 0, rounds = 0, withData = 0;
+                    rows.forEach(r => { bet += r.bet; payout += r.payout; rounds += r.rounds; if (!r.empty) withData++; });
+                    const rtp = bet > 0 ? payout / bet * 100 : 0;
+                    const card = compOf((clusterStats.value || {})[dailyTrendSeg.value], dailyTrendView.value);
+                    const cardRtp = card ? card.rtp : null;
+                    return { bet, payout, rounds, rtp, days: rows.length, withData,
+                             cardRtp, mismatch: cardRtp !== null && Math.abs(cardRtp - rtp) > 0.005 };
+                });
+
+                // 天數多的時候整張圖擠成一團, 所以給每一天固定寬度、外層橫向捲動。
+                // 用 minWidth 而不是 width: 天數少時圖還是撐滿容器, 不會出現一條沒必要的捲軸。
+                const TREND_DAY_PX = 64;
+                const dailyTrendMinWidth = computed(() => dailyTrendRows.value.length * TREND_DAY_PX);
+                // 會不會需要捲動不是「天數多不多」決定的, 是容器寬度決定的 —— 同樣 20 天,
+                // 寬螢幕塞得下、筆電就得捲。所以不猜門檻, 畫完之後量真正的 scrollWidth。
+                const dailyTrendScrolls = ref(false);
+
+                const destroyTrendCharts = () => {
+                    if (trendRtpChart) { trendRtpChart.destroy(); trendRtpChart = null; }
+                    if (trendCompChart) { trendCompChart.destroy(); trendCompChart = null; }
+                };
+
+                const renderDailyTrendCharts = () => {
+                    const rows = dailyTrendRows.value;
+                    const rtpEl = document.getElementById('trendRtpChart');
+                    const compEl = document.getElementById('trendCompChart');
+                    if (!rtpEl || !compEl) return;
+                    destroyTrendCharts();
+                    if (!rows.length) return;
+                    // canvas -> .h-64 -> 撐寬度的那層 -> overflow-x-auto 的捲動容器
+                    const scroller = rtpEl.parentElement?.parentElement?.parentElement;
+                    dailyTrendScrolls.value = !!scroller && scroller.scrollWidth > scroller.clientWidth + 1;
+
+                    const labels = rows.map(r => r.day.slice(5).replace('-', '/'));
+                    const avg = dailyTrendTotal.value.rtp;
+                    const live = rows.filter(r => !r.empty);
+                    // 兩張圖的 y 軸寬度鎖死, 否則刻度字寬不同會讓上下兩張圖的同一天對不齊 ——
+                    // 它們共用一個橫向捲動容器, 對不齊就完全失去並排看的意義。
+                    const lockY = (a) => { a.width = 56; };
+                    const dayTitle = (c) => {
+                        const r = rows[c[0].dataIndex];
+                        return r.day + (r.partial ? `（部分時段 ${r.window}）` : '');
+                    };
+
+                    // 折線: 每日 RTP。y 軸跟著資料收放並保證含基準線, 否則某一天暴衝會把其他天壓平。
+                    const vals = live.map(r => r.rtp).concat([avg]);
+                    const lo = Math.min(...vals), hi = Math.max(...vals);
+                    const pad = Math.max(1, (hi - lo) * 0.18);
+                    trendRtpChart = new Chart(rtpEl, {
+                        type: 'line',
+                        data: {
+                            labels,
+                            datasets: [
+                                {
+                                    label: '當日 RTP',
+                                    data: rows.map(r => r.rtp),
+                                    borderColor: 'rgba(250, 204, 21, 1)',
+                                    backgroundColor: 'rgba(250, 204, 21, 0.10)',
+                                    fill: true, tension: 0.25, borderWidth: 2,
+                                    // 沒資料的那天不要連過去 —— 連了看起來就像那天有值
+                                    spanGaps: false,
+                                    pointRadius: rows.map(r => r.partial ? 5 : 3), pointHoverRadius: 6,
+                                    // 部分時段那天標成空心點: 局數少、上下跳得凶, 不標會被讀成當天真的異常
+                                    pointBackgroundColor: rows.map(r => r.partial ? '#0f172a' : 'rgba(250,204,21,1)'),
+                                    pointBorderColor: 'rgba(250,204,21,1)', pointBorderWidth: 2
+                                },
+                                {
+                                    label: '區間平均',
+                                    data: rows.map(() => avg),
+                                    borderColor: 'rgba(148, 163, 184, 0.8)',
+                                    borderDash: [5, 5], pointRadius: 0, borderWidth: 1, fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            animation: false,   // 天數多時逐點動畫很卡, 而且切視角時會看到兩張圖不同步地長出來
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { display: true, position: 'bottom',
+                                          labels: { color: AXIS.color, boxWidth: 12, font: { size: 11 } } },
+                                tooltip: { callbacks: {
+                                    title: dayTitle,
+                                    label: (c) => {
+                                        if (c.datasetIndex === 1) return `區間平均 ${avg.toFixed(2)}%`;
+                                        const r = rows[c.dataIndex];
+                                        if (r.empty) return '此視角當日無局';
+                                        return [`當日 RTP ${r.rtp.toFixed(2)}%`,
+                                                `投注 ${formatMoney(r.bet)}`,
+                                                `派彩 ${formatMoney(r.payout)}`,
+                                                `${r.rounds.toLocaleString()} 人次`];
+                                    }
+                                } }
+                            },
+                            scales: {
+                                y: { min: lo - pad, max: hi + pad, afterFit: lockY,
+                                     grid: GRID, ticks: { color: AXIS.color, callback: (v) => v.toFixed(0) + '%' } },
+                                x: { grid: { display: false }, ticks: { color: AXIS.color, autoSkip: false, maxRotation: 0 } }
+                            }
+                        }
+                    });
+
+                    // 堆疊直方圖: 每日 RTP 組成。柱高 = 當日 RTP, 所以上下兩張圖說的是同一件事,
+                    // 只是一張看總量走勢、一張看那個總量是由誰貢獻的。
+                    // 不設 y.min: 二級玩法是殘差算出來的, 真有負值時設了 0 會把那一段裁掉,
+                    // 柱高就不再等於折線上的 RTP, 而兩張圖對不上是這個畫面最不該發生的事。
+                    const maxTotal = Math.max(...live.map(r => r.rtp), avg, 0);
+                    trendCompChart = new Chart(compEl, {
+                        type: 'bar',
+                        data: {
+                            labels,
+                            // 順序照 COMP_PARTS, 跟卡片橫條、逐格明細橫條一致
+                            datasets: COMP_PARTS.map((x, xi) => ({
+                                label: x.t,
+                                data: rows.map(r => r.parts ? r.parts[xi].pct : null),
+                                backgroundColor: x.c, borderWidth: 0
+                            }))
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            animation: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { display: true, position: 'bottom',
+                                          labels: { color: AXIS.color, boxWidth: 12, font: { size: 11 } } },
+                                tooltip: { callbacks: {
+                                    title: dayTitle,
+                                    label: (c) => `${c.dataset.label} ${c.parsed.y.toFixed(2)}%`,
+                                    footer: (c) => {
+                                        const r = rows[c[0].dataIndex];
+                                        return r.empty ? '此視角當日無局' : `合計 ${r.rtp.toFixed(2)}%`;
+                                    }
+                                } }
+                            },
+                            scales: {
+                                y: { stacked: true, beginAtZero: true, max: Math.ceil((maxTotal * 1.08) / 5) * 5,
+                                     afterFit: lockY,
+                                     grid: GRID, ticks: { color: AXIS.color, callback: (v) => v + '%' } },
+                                x: { stacked: true, grid: { display: false },
+                                     ticks: { color: AXIS.color, autoSkip: false, maxRotation: 0 } }
+                            }
+                        }
+                    });
+                };
+
+                // 開圖、換群、換視角、算完 都要重畫; 關掉就銷毀, 否則 canvas 被 v-if 拔掉之後
+                // Chart.js 還握著它, 下次開會拿到殘留的舊圖。
+                // canvas 在 v-if 裡, 設旗標的當下還沒掛上 DOM, 一定要 nextTick。
+                watch([dailyTrendSeg, dailyTrendView, dailyTrend], ([seg]) => {
+                    if (!seg) { destroyTrendCharts(); return; }
+                    nextTick(() => renderDailyTrendCharts());
+                });
 
                 const computeClusters = () => {
                     const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0,
@@ -5254,6 +5611,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
                     cellDetailSeg, cellStatsOf, cellTotalsOf, openCellDetail, cellStats, exportCellDetailPng,
+                    dailyTrendSeg, dailyTrendView, dailyTrendRows, dailyTrendTotal, dailyTrendMinWidth,
+                    dailyTrendScrolls, openDailyTrend, closeDailyTrend,
                     cellView, cellViews: CELL_VIEWS, cellCompOpen,
                     compView, compOpen, compOf, segView, compViews: COMP_VIEWS,
                     cardMode, shownSegments, compSingleViews: COMP_SINGLE_VIEWS,
