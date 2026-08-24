@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.56</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.57</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -542,13 +542,23 @@
                                             :title="x.t + ' ' + x.pct.toFixed(2) + '%'"></div>
                                     </div>
                                     <div class="mt-1.5 space-y-0.5">
-                                        <div v-for="x in compOf(clusterStats[seg]).parts" :key="'r'+x.k"
-                                            class="flex items-center justify-between text-[11px]">
-                                            <span class="flex items-center gap-1.5 text-gray-400">
-                                                <span class="w-2 h-2 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
-                                            </span>
-                                            <span class="font-mono" :class="x.pct > 0 ? 'text-gray-200' : 'text-gray-600'">{{ x.pct.toFixed(2) }}%</span>
-                                        </div>
+                                        <template v-for="x in compOf(clusterStats[seg]).parts" :key="'r'+x.k">
+                                            <div class="flex items-center justify-between text-[11px]">
+                                                <span class="flex items-center gap-1.5 text-gray-400">
+                                                    <span class="w-2 h-2 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
+                                                </span>
+                                                <span class="font-mono" :class="x.pct > 0 ? 'text-gray-200' : 'text-gray-600'">{{ x.pct.toFixed(2) }}%</span>
+                                            </div>
+                                            <!-- 二級再拆到收手層數。爆掉的那些貢獻 0, 所以只列有拿到錢的層 -->
+                                            <div v-if="x.k === 'bonus' && compOf(clusterStats[seg]).bonusLevels.length"
+                                                class="pl-3.5 pb-0.5">
+                                                <div v-for="lv in compOf(clusterStats[seg]).bonusLevels" :key="'lv'+lv.i"
+                                                    class="flex items-center justify-between text-[10px] text-gray-500">
+                                                    <span :class="lv.i === 6 ? 'text-amber-400' : ''">└ 清完 {{ lv.t }} 收手</span>
+                                                    <span class="font-mono">{{ lv.pct.toFixed(3) }}%</span>
+                                                </div>
+                                            </div>
+                                        </template>
                                     </div>
                                     <div class="text-[10px] text-gray-600 mt-1">
                                         此視角 {{ compOf(clusterStats[seg]).rounds.toLocaleString() }} 人次 · 投注 {{ formatMoney(compOf(clusterStats[seg]).bet) }}
@@ -2737,11 +2747,14 @@
                 // 玩家統計的聚合器。全站重算與「只看某一天」共用同一份邏輯 ——
                 // 兩邊各寫一次的話, 遲早會有一邊改到、另一邊沒改。
                 // 一份組成: 分母(投注)與五個分子
-                const blankComp = () => ({ bet: 0, base: 0, free: 0, paid: 0, jp: 0, bonus: 0, payout: 0, rounds: 0 });
+                // bonusLv: [爆掉, 1層, 2層, 3層, 4層, 5層, 對不上賠付表]
+                const blankComp = () => ({ bet: 0, base: 0, free: 0, paid: 0, jp: 0, bonus: 0, payout: 0, rounds: 0,
+                    bonusLv: new Array(7).fill(0) });
                 const addComp = (c, r) => {
                     c.bet += r.bet; c.payout += r.payout; c.rounds += 1;
                     c.base += r.wBase || 0; c.free += r.wFree || 0; c.paid += r.wPaid || 0;
                     c.jp += r.wJp || 0; c.bonus += r.wBonus || 0;
+                    if (r.wBonusLv) for (let i = 0; i < 7; i++) c.bonusLv[i] += r.wBonusLv[i];
                 };
 
                 const blankPlayerAgg = (account, agent) => ({
@@ -3095,7 +3108,13 @@
                                             const jp = parseFloat(row['JP Win']) || 0;
                                             const g = groupedRounds[roundKey];
                                             g.wBase += base; g.wFree += free; g.wPaid += paid; g.wJp += jp;
-                                            g.wBonus += payout - (base + free + paid + jp);
+                                            const resid = payout - (base + free + paid + jp);
+                                            g.wBonus += resid;
+                                            // 只有真的進二級的注單才配陣列 —— 觸發率不到 1%, 每局都配很浪費
+                                            if (row['BGLevel1']) {
+                                                if (!g.wBonusLv) g.wBonusLv = new Array(7).fill(0);
+                                                g.wBonusLv[bonusLevelOf(bet > 0 ? resid / bet : 0)] += resid;
+                                            }
                                             if (Object.keys(extra).length) g.hasExtra = true;
                                         } else if (betPlace === 10) {
                                             if (row['Extra Result']) groupedRounds[roundKey].hasExtra = true;
@@ -3215,10 +3234,15 @@
                     const c = stats && stats.comp && stats.comp[view || compView.value];
                     if (!c || !(c.bet > 0)) return null;
                     const pct = (v) => v / c.bet * 100;
+                    const LV_LABEL = ['爆掉', '1 層', '2 層', '3 層', '4 層', '5 層', '其他'];
                     return {
                         bet: c.bet, payout: c.payout, rounds: c.rounds,
                         rtp: pct(c.payout),
-                        parts: COMP_PARTS.map(x => ({ ...x, amount: c[x.k], pct: pct(c[x.k]) }))
+                        parts: COMP_PARTS.map(x => ({ ...x, amount: c[x.k], pct: pct(c[x.k]) })),
+                        // 二級再拆成收手層數。爆掉那格金額恆為 0, 列出來只是雜訊
+                        bonusLevels: c.bonusLv
+                            .map((amt, i) => ({ i, t: LV_LABEL[i], amount: amt, pct: pct(amt) }))
+                            .filter(x => x.i > 0 && x.amount !== 0)
                     };
                 };
 
@@ -3269,6 +3293,7 @@
                             dst.bet += src.bet; dst.payout += src.payout; dst.rounds += src.rounds;
                             dst.base += src.base; dst.free += src.free; dst.paid += src.paid;
                             dst.jp += src.jp; dst.bonus += src.bonus;
+                            for (let i = 0; i < 7; i++) dst.bonusLv[i] += src.bonusLv[i];
                         });
                     });
                     
@@ -3554,6 +3579,17 @@
                 // 但它可驗證: 實測 180 萬列注單裡, 殘差 100% 落在 bonusGame.payouts 的
                 // {0,15,40,100,250,500} 上, 而非二級注單的殘差恰好為 0 —— 那才是這套歸屬正確的證據。
                 const BASE_PAYOUTS = { 1: 2, 2: 5, 3: 10 };
+                // bonusGame.levelSettings.payouts。殘差 / 投注額 對到哪一格就是清了幾層 ——
+                // 這五個值互不相同所以是一對一。實測 8,770 次二級, 用殘差推的層數與
+                // BGLevel 記的過程(Bomb / CashOut / Continue)推的層數 100% 一致, 兩種推法互為驗證。
+                const BONUS_PAYOUTS = [15, 40, 100, 250, 500];
+                // 對不上賠付表的丟進最後一格: 寧可在畫面上看到「其他」也不要靜默吞掉
+                const bonusLevelOf = (perBet) => {
+                    if (Math.abs(perBet) < 1e-3) return 0;                 // 爆掉, 沒拿到錢
+                    for (let i = 0; i < BONUS_PAYOUTS.length; i++)
+                        if (Math.abs(perBet - BONUS_PAYOUTS[i]) < 1e-3) return i + 1;
+                    return 6;
+                };
                 const parseCells = (raw) => String(raw || '').match(/\d+/g) || [];
                 // "(3,2),(4,3)" -> { '3': 2, '4': 3 }
                 const parseExtra = (raw) => {
