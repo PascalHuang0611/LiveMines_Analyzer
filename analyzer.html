@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.57</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.59</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -493,13 +493,12 @@
                     </span></div>
 
                     <div class="space-y-2 mt-4">
-                        <div class="flex justify-between text-sm cursor-pointer select-none hover:text-white transition-colors"
-                            @click="compOpen = !compOpen"
-                            :title="(compOpen ? '收起' : '展開') + ' RTP 組成（一級 / 免費閃電 / 付費閃電 / 二級 / JP）'">
-                            <span class="text-gray-400 flex items-center gap-1">
-                                <span class="text-[10px] text-gray-500">{{ compOpen ? '▾' : '▸' }}</span>
-                                <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">群體 RTP</span>
-                            </span>
+                        <!-- 單純的資訊列。展開/收起由上方那排負責 —— 兩個控件管同一個狀態只會讓人誤觸 -->
+                        <div class="flex justify-between text-sm cursor-help"
+                            :title="`計算公式: 總派彩 / 總投注
+分子: ${formatMoney(clusterStats[seg]?.payout || 0)}
+分母: ${formatMoney(clusterStats[seg]?.turnover || 0)}`">
+                            <span class="text-gray-400 border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">群體 RTP</span>
                             <span class="font-bold" :class="(clusterStats[seg]?.turnover > 0 ? (clusterStats[seg].payout / clusterStats[seg].turnover * 100) : 0) >= 100 ? 'text-red-400' : 'text-green-400'">
                                 {{ clusterStats[seg]?.turnover > 0 ? (clusterStats[seg].payout / clusterStats[seg].turnover * 100).toFixed(2) : '0.00' }}%
                             </span>
@@ -553,9 +552,19 @@
                                             <div v-if="x.k === 'bonus' && compOf(clusterStats[seg]).bonusLevels.length"
                                                 class="pl-3.5 pb-0.5">
                                                 <div v-for="lv in compOf(clusterStats[seg]).bonusLevels" :key="'lv'+lv.i"
-                                                    class="flex items-center justify-between text-[10px] text-gray-500">
-                                                    <span :class="lv.i === 6 ? 'text-amber-400' : ''">└ 清完 {{ lv.t }} 收手</span>
-                                                    <span class="font-mono">{{ lv.pct.toFixed(3) }}%</span>
+                                                    class="flex items-center justify-between text-[10px] text-gray-500 gap-2"
+                                                    :title="lv.survival === null ? '對不上賠付表的殘差'
+                                                        : `到過第 ${lv.i} 層 ${lv.reach.toLocaleString()} 次，其中 ${lv.bomb.toLocaleString()} 次爆掉
+存活率 = (到過 − 爆掉) / 到過
+收手 RTP 的分母是總投注，與存活率不同，兩者不能互推`">
+                                                    <span :class="lv.i === 6 ? 'text-amber-400' : ''">└ {{ lv.t }}</span>
+                                                    <span class="flex items-center gap-2 font-mono shrink-0">
+                                                        <span v-if="lv.survival !== null"
+                                                            :class="lv.reach >= 200 ? 'text-sky-300' : 'text-sky-300/50'">
+                                                            存活 {{ lv.survival.toFixed(1) }}%
+                                                        </span>
+                                                        <span>收手 {{ lv.pct.toFixed(3) }}%</span>
+                                                    </span>
                                                 </div>
                                             </div>
                                         </template>
@@ -660,9 +669,10 @@
                     </div>
                     
                     <div class="grid grid-cols-3 gap-2 w-48 h-48 mx-auto mb-4">
-                        <div v-for="i in 9" :key="i" 
-                            class="rounded-lg flex flex-col items-center justify-center font-bold text-white transition-all shadow-lg"
-                            :style="{ backgroundColor: getHeatColor(i) }">
+                        <div v-for="i in 9" :key="i"
+                            class="rounded-lg flex flex-col items-center justify-center font-bold transition-all shadow-lg"
+                            :style="{ backgroundColor: heatCellOf(i).bg, color: heatCellOf(i).fg }"
+                            :title="`第 ${i} 格　${getHeatCount(i).toLocaleString()} 次\n占比 ${(heatTotal ? getHeatCount(i)/heatTotal*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${heatCellOf(i).z.toFixed(2)}`">
                             <span class="text-xl">{{ i }}</span>
                             <span class="text-[10px] opacity-80 mt-1">{{ getHeatCount(i).toLocaleString() }}次</span>
                         </div>
@@ -2749,12 +2759,17 @@
                 // 一份組成: 分母(投注)與五個分子
                 // bonusLv: [爆掉, 1層, 2層, 3層, 4層, 5層, 對不上賠付表]
                 const blankComp = () => ({ bet: 0, base: 0, free: 0, paid: 0, jp: 0, bonus: 0, payout: 0, rounds: 0,
-                    bonusLv: new Array(7).fill(0) });
+                    bonusLv: new Array(7).fill(0),
+                    // 到過第 i 層的次數 / 在第 i 層爆掉的次數 (i = 1..5), 存活率靠這兩個算
+                    bonusReach: new Array(6).fill(0), bonusBomb: new Array(6).fill(0) });
                 const addComp = (c, r) => {
                     c.bet += r.bet; c.payout += r.payout; c.rounds += 1;
                     c.base += r.wBase || 0; c.free += r.wFree || 0; c.paid += r.wPaid || 0;
                     c.jp += r.wJp || 0; c.bonus += r.wBonus || 0;
                     if (r.wBonusLv) for (let i = 0; i < 7; i++) c.bonusLv[i] += r.wBonusLv[i];
+                    if (r.wBonusReach) for (let i = 1; i < 6; i++) {
+                        c.bonusReach[i] += r.wBonusReach[i]; c.bonusBomb[i] += r.wBonusBomb[i];
+                    }
                 };
 
                 const blankPlayerAgg = (account, agent) => ({
@@ -3114,6 +3129,19 @@
                                             if (row['BGLevel1']) {
                                                 if (!g.wBonusLv) g.wBonusLv = new Array(7).fill(0);
                                                 g.wBonusLv[bonusLevelOf(bet > 0 ? resid / bet : 0)] += resid;
+                                                // 闖關過程: BGLevel 有幾欄非空就是嘗試到第幾層, 最後一欄的結果決定是爆掉還是收手。
+                                                // 存活率的分母是「到過這層的人」, 所以到過的每一層都要記, 不只記結束的那一層。
+                                                let steps = 0, last = "";
+                                                for (let i = 1; i <= 5; i++) {
+                                                    const v = row["BGLevel" + i];
+                                                    if (!v) break;
+                                                    steps = i; last = String(v).split(",").pop().trim();
+                                                }
+                                                if (steps) {
+                                                    if (!g.wBonusReach) { g.wBonusReach = new Array(6).fill(0); g.wBonusBomb = new Array(6).fill(0); }
+                                                    for (let i = 1; i <= steps; i++) g.wBonusReach[i] += 1;
+                                                    if (last === "Bomb") g.wBonusBomb[steps] += 1;
+                                                }
                                             }
                                             if (Object.keys(extra).length) g.hasExtra = true;
                                         } else if (betPlace === 10) {
@@ -3239,10 +3267,18 @@
                         bet: c.bet, payout: c.payout, rounds: c.rounds,
                         rtp: pct(c.payout),
                         parts: COMP_PARTS.map(x => ({ ...x, amount: c[x.k], pct: pct(c[x.k]) })),
-                        // 二級再拆成收手層數。爆掉那格金額恆為 0, 列出來只是雜訊
+                        // 二級再拆到層數: 每層的收手 RTP, 加上「到過這層的人有多少沒爆掉」。
+                        // 兩者分母不同 —— 收手 RTP 的分母是總投注, 存活率的分母是到過該層的次數 ——
+                        // 所以是兩個獨立的指標, 不能互相推導。
                         bonusLevels: c.bonusLv
-                            .map((amt, i) => ({ i, t: LV_LABEL[i], amount: amt, pct: pct(amt) }))
-                            .filter(x => x.i > 0 && x.amount !== 0)
+                            .map((amt, i) => ({
+                                i, t: LV_LABEL[i], amount: amt, pct: pct(amt),
+                                reach: i >= 1 && i <= 5 ? c.bonusReach[i] : 0,
+                                bomb: i >= 1 && i <= 5 ? c.bonusBomb[i] : 0,
+                                survival: (i >= 1 && i <= 5 && c.bonusReach[i] > 0)
+                                    ? (c.bonusReach[i] - c.bonusBomb[i]) / c.bonusReach[i] * 100 : null
+                            }))
+                            .filter(x => x.i > 0 && (x.amount !== 0 || x.reach > 0))
                     };
                 };
 
@@ -3294,6 +3330,9 @@
                             dst.base += src.base; dst.free += src.free; dst.paid += src.paid;
                             dst.jp += src.jp; dst.bonus += src.bonus;
                             for (let i = 0; i < 7; i++) dst.bonusLv[i] += src.bonusLv[i];
+                            for (let i = 1; i < 6; i++) {
+                                dst.bonusReach[i] += src.bonusReach[i]; dst.bonusBomb[i] += src.bonusBomb[i];
+                            }
                         });
                     });
                     
@@ -3474,20 +3513,17 @@
                     return hotzoneMode.value === 'ball' ? ballCounts.value[index-1] : lightningCounts.value[index-1];
                 };
 
-                const getHeatColor = (index) => {
+                // 顏色走跟大盤落球熱力圖同一支 divergingCell —— 紅=偏高、白=接近期望、藍=偏低,
+                // 兩處的顏色語言一致才不用重新學。deff 傳 1: 這裡只要顏色規則相同,
+                // 不套大盤那邊的 design effect 校正(那是為了卡方顯著性, 屬於統計而非配色)。
+                const heatTotal = computed(() => {
                     const counts = hotzoneMode.value === 'ball' ? ballCounts.value : lightningCounts.value;
-                    const val = counts[index-1];
-                    const max = Math.max(...counts, 1); // prevent div by zero
-                    const ratio = val / max; // 0 to 1
-                    
-                    // Base color: cyan-900 -> cyan-400 for ball, yellow-900 -> yellow-400 for lightning
-                    if (hotzoneMode.value === 'ball') {
-                        // RGB for cyan: max is 34, 211, 238
-                        return `rgba(34, 211, 238, ${0.1 + ratio * 0.8})`;
-                    } else {
-                        // RGB for yellow: max is 250, 204, 21
-                        return `rgba(250, 204, 21, ${0.1 + ratio * 0.8})`;
-                    }
+                    return counts.reduce((a, b) => a + b, 0);
+                });
+                const heatCellOf = (index) => {
+                    const counts = hotzoneMode.value === 'ball' ? ballCounts.value : lightningCounts.value;
+                    const total = counts.reduce((a, b) => a + b, 0);
+                    return divergingCell(counts[index - 1], total, 1);
                 };
 
                 const chiSquareTest = computed(() => {
@@ -4534,7 +4570,7 @@
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
-                    handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, getHeatColor,
+                    handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, heatCellOf, heatTotal,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
                     nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
