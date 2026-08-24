@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.62</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.63</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -449,6 +449,16 @@
                  而觸發展開的點擊區就在卡片裡 —— 點下去目標自己跑掉。長說明搬進 tooltip,
                  所以常駐的高度比原本展開時還小。 -->
             <div class="flex flex-wrap items-center gap-2 -mb-2">
+                <div class="flex rounded overflow-hidden border border-white/10 mr-1">
+                    <button @click="cardMode = 'seg'"
+                        class="px-3 py-1 text-xs transition-colors"
+                        :class="cardMode === 'seg' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'"
+                        title="依平均押注額分成高價值 / 中階 / 休閒三群">分群</button>
+                    <button @click="cardMode = 'all'"
+                        class="px-3 py-1 text-xs transition-colors"
+                        :class="cardMode === 'all' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'"
+                        title="不分群，看全站合計">全站</button>
+                </div>
                 <span class="text-sm text-gray-400 border-b border-dashed border-gray-600 pb-0.5 cursor-help"
                     title="以「局」為單位切分：同一位玩家有些局買了 EXBET、有些沒買，會同時計入兩邊。&#10;分母含 EXBET 加購費，所以五項相加就是該視角的總 RTP。&#10;「三種並列」會在每張卡同時畫三條，條長共用全域上限，所以長度代表總 RTP、分段代表組成。">
                     RTP 組成
@@ -465,17 +475,17 @@
             </div>
 
             <!-- Segment Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="grid gap-6" :class="cardMode === 'all' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'">
                 <!-- 卡片本身不再是篩選開關: 它裡面已經有「展開組成」的點擊區, 兩件事綁在同一塊會誤觸。
                      篩選改由下方排行榜自己的按鈕負責。 -->
-                <div v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家']" :key="seg"
+                <div v-for="seg in shownSegments" :key="seg"
                     class="glass rounded-2xl p-6 relative overflow-hidden transition-all"
                     :class="segmentFilter === seg ? 'ring-2 ring-indigo-400/60' : ''">
                     <div
                         class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-bl-full -z-10">
                     </div>
                     <h3 class="text-xl font-bold mb-4"
-                        :class="{'text-indigo-400': seg==='高價值玩家', 'text-cyan-400': seg==='中階玩家', 'text-gray-400': seg==='休閒玩家'}">
+                        :class="{'text-indigo-400': seg==='高價值玩家', 'text-cyan-400': seg==='中階玩家', 'text-gray-400': seg==='休閒玩家', 'text-emerald-400': seg==='全站'}">
                         {{ seg }}
                     </h3>
                     <div class="text-3xl font-extrabold mb-1">{{ clusterStats[seg]?.count.toLocaleString() || 0 }} <span
@@ -1117,6 +1127,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 :class="cellView === v.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">{{ v.t }}</button>
                         </div>
                         <span class="text-[11px] text-gray-500">以「局」為單位切分</span>
+                        <button @click="cellCompOpen = !cellCompOpen"
+                            class="text-[11px] transition-colors border rounded px-2 py-1"
+                            :class="cellCompOpen ? 'text-indigo-300 border-indigo-400/40 bg-indigo-500/10' : 'text-gray-400 border-white/10 hover:bg-white/5'"
+                            title="每一格再拆成 一級 / 免費閃電 / 付費閃電 / 二級 / JP">
+                            {{ cellCompOpen ? '▾' : '▸' }} RTP 組成
+                        </button>
                     </div>
                     <p class="text-xs text-gray-500 mt-1">
                         每一格統計「押在該格」的注單，並把該局的 EXBET 加購費按各格投注比例攤進成本 ——
@@ -1205,6 +1221,23 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     <div v-if="cellView === 0" class="flex justify-between" title="押該格時同一局也買了 EXBET 的人次 / 押過該格的人次。切到「有 EX / 沒 EX」時這個數字必然是 100% / 0%，所以只在「全體」顯示。">
                                         <span class="text-gray-400 border-b border-dashed border-gray-600">EXBET 局數占比</span>
                                         <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).exRoundPct.toFixed(1) }}%</span></div>
+
+                                    <!-- 這一格的 RTP 組成。分母跟上面的「此格 RTP」同一個(含攤入的加購費),
+                                         所以五項相加就等於此格 RTP。預設收起 —— 九張卡各多五行太雜。 -->
+                                    <div v-if="cellCompOpen" class="pt-1.5 mt-1.5 border-t border-white/5">
+                                        <div class="flex h-1.5 rounded overflow-hidden bg-slate-900 mb-1">
+                                            <div v-for="x in cellStatsOf(cellDetailSeg, place).parts" :key="x.k"
+                                                :style="{ width: Math.max(0, x.pct / Math.max(0.01, cellStatsOf(cellDetailSeg, place).rtp) * 100) + '%', backgroundColor: x.c }"
+                                                :title="x.t + ' ' + x.pct.toFixed(2) + '%'"></div>
+                                        </div>
+                                        <div v-for="x in cellStatsOf(cellDetailSeg, place).parts" :key="'p'+x.k"
+                                            class="flex items-center justify-between text-[10px]">
+                                            <span class="flex items-center gap-1.5 text-gray-500">
+                                                <span class="w-1.5 h-1.5 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
+                                            </span>
+                                            <span class="font-mono" :class="x.pct > 0 ? 'text-gray-300' : 'text-gray-600'">{{ x.pct.toFixed(2) }}%</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </template>
                             <div v-else class="text-xs text-gray-600 py-8 text-center">沒有資料</div>
@@ -2087,7 +2120,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 也刻意不掛在 round 物件上: allRounds 是 deep ref, 每個 round 被讀到就生一個 Proxy,
                 // 在 round 上多掛陣列會連帶多生 Proxy。這組 180 萬列約 38MB 且完全不進 reactive 圖。
                 let billRound = null, billCell = null, billBet = null, billPayout = null;
+                // RTP 五項組成也逐列留下來(二級是殘差, 不必存)。四條 Float64 在 180 萬列下約 58MB,
+                // 相對於整體 1.6GB 是 3.6% —— 可以用更省的位元打包, 但那要假設
+                // 免費閃電倍率恆為 1、購買閃電只有 1/2/3, 假設一旦被打破就是靜默錯誤。
+                let billBase = null, billFree = null, billPaid = null, billJp = null;
                 let billRoundArr = null, billCellArr = null, billBetArr = null, billPayoutArr = null;
+                let billBaseArr = null, billFreeArr = null, billPaidArr = null, billJpArr = null;
                 let roundSeq = 0, dataGen = 0;   // dataGen: 重新匯入時讓逐格快取失效
 
                 const allRounds = ref([]);     // 全部玩家單局, 篩選時間範圍後重新聚合就靠它
@@ -2921,7 +2959,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 所以按各格投注比例攤回去不是任意分配, 而是精確的 —— 那一局每格的實際成本就是 1.5 倍。
                 // 攤了之後九格成本加總 = 群總投注, 逐格 RTP 就能直接跟卡片上的群體 RTP 比,
                 // 不必再擺一個「九格合計 RTP」當中介基準。
-                const blankCell = () => ({ bet: 0, cost: 0, payout: 0, rows: 0, rounds: 0, hitRounds: 0, winRounds: 0, exRounds: 0 });
+                const blankCell = () => ({ bet: 0, cost: 0, payout: 0, rows: 0, rounds: 0, hitRounds: 0, winRounds: 0, exRounds: 0,
+                    base: 0, free: 0, paid: 0, jp: 0, bonus: 0 });
 
                 const blankPlayerAgg = (account, agent) => ({
                     account, agent: agent || '',
@@ -3188,6 +3227,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     // 而 Chrome 的 heap 上限是 4GB, 單檔解析還要再吃 550MB 瞬時, 會 OOM。
                     // 平行陣列用 TypedArray 存, 完全不進 reactive 圖, 180 萬列約 38MB。
                     billRoundArr = []; billCellArr = []; billBetArr = []; billPayoutArr = [];
+                    billBaseArr = []; billFreeArr = []; billPaidArr = []; billJpArr = [];
                     roundSeq = 0;
 
                     // 兩個 CSV 是分別撈的, 時間範圍常常對不齊。這裡只記錄各自的頭尾, 載入完再比對。
@@ -3287,6 +3327,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                             const g = groupedRounds[roundKey];
                                             billRoundArr.push(g.idx); billCellArr.push(betPlace);
                                             billBetArr.push(bet); billPayoutArr.push(payout);
+                                            billBaseArr.push(base); billFreeArr.push(free);
+                                            billPaidArr.push(paid); billJpArr.push(jp);
                                             g.wBase += base; g.wFree += free; g.wPaid += paid; g.wJp += jp;
                                             const resid = payout - (base + free + paid + jp);
                                             g.wBonus += resid;
@@ -3393,14 +3435,19 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         billCell = new Uint8Array(nb);
                         billBet = new Float64Array(nb);      // 金額一定用 Float64: Float32 只有 7 位
                         billPayout = new Float64Array(nb);   // 有效數字, 十萬級金額會失真
+                        billBase = new Float64Array(nb); billFree = new Float64Array(nb);
+                        billPaid = new Float64Array(nb); billJp = new Float64Array(nb);
                         for (let i = 0; i < nb; i++) {
                             const pos = off[billRoundArr[i]]++;
                             billRound[pos] = billRoundArr[i];
                             billCell[pos] = billCellArr[i];
                             billBet[pos] = billBetArr[i];
                             billPayout[pos] = billPayoutArr[i];
+                            billBase[pos] = billBaseArr[i]; billFree[pos] = billFreeArr[i];
+                            billPaid[pos] = billPaidArr[i]; billJp[pos] = billJpArr[i];
                         }
                         billRoundArr = billCellArr = billBetArr = billPayoutArr = null;
+                        billBaseArr = billFreeArr = billPaidArr = billJpArr = null;
                     }
 
                     // 只載大盤 CSV 時範圍原本完全不會初始化, rangeIsFull 為 false 卻又什麼都不篩,
@@ -3432,6 +3479,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 ];
                 const COMP_VIEWS = COMP_SINGLE_VIEWS.concat([{ k: 'compare', t: '三種並列' }]);
                 const compView = ref(store.get('livemines_comp_view') || 'all');
+                // 分群檢視 / 全站合計。全站是當成第四個分群算出來的, 所以卡片內容一字不改就能共用。
+                const cardMode = ref(store.get('livemines_card_mode') === 'all' ? 'all' : 'seg');
+                watch(cardMode, (v) => store.set('livemines_card_mode', v));
+                const SEGS = ['高價值玩家', '中階玩家', '休閒玩家'];
+                const shownSegments = computed(() => cardMode.value === 'all' ? ['全站'] : SEGS);
                 // 預設收起。三張卡共用同一個展開狀態 —— 要比較就是一次看三張, 分開展開沒有意義。
                 const compOpen = ref(store.get('livemines_comp_open') === '1');
                 watch(compOpen, (v) => store.set('livemines_comp_open', v ? '1' : '0'));
@@ -3507,6 +3559,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 逐格明細自己的視角。跟卡片那排分開 —— 那排多一個「三種並列」, 而且這是獨立的深入檢視。
                 const CELL_VIEWS = [{ k: 0, t: '全體' }, { k: 1, t: '有 EX' }, { k: 2, t: '沒 EX' }];
                 const cellView = ref(0);
+                // 九格共用一個開關 —— 它們是拿來互相比較的, 分開展開沒有意義, 而且九張卡各多五行會很雜
+                const cellCompOpen = ref(store.get('livemines_cell_comp_open') === '1');
+                watch(cellCompOpen, (v) => store.set('livemines_cell_comp_open', v ? '1' : '0'));
 
                 // ===== 逐格明細 =====
                 // 為什麼是「開畫面才算」而不是跟著聚合一起算: 逐格是 9 倍寬的累加, 而 rebuildFromRounds
@@ -3541,8 +3596,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     let np = 0;
                     Object.values(players).forEach(p => {
                         accIdx.set(p.account, np++);
-                        const s = out[p.segment] || (out[p.segment] = mk());
-                        s.exbetBet += p.exbetBet;      // 這筆錢無格可歸, 對帳列要用
+                        [p.segment, '全站'].forEach(sg => {
+                            const s = out[sg] || (out[sg] = mk());
+                            s.exbetBet += p.exbetBet;   // 這筆錢無格可歸, 對帳列要用
+                        });
                     });
                     Object.values(out).forEach(s => {
                         s.nPlayers = np;
@@ -3580,10 +3637,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const nb = billRound ? billRound.length : 0;
                     const sBet = new Float64Array(9), sPay = new Float64Array(9);
                     const sRows = new Int32Array(9);
+                    const sBase = new Float64Array(9), sFree = new Float64Array(9);
+                    const sPaid = new Float64Array(9), sJp = new Float64Array(9);
                     let cur = -1, curSeg = -1, curEx = 0, curAcc = -1, curFee = 0, curGrid = 0;
                     const flush = () => {
                         if (curSeg < 0) { sBet.fill(0); sPay.fill(0); sRows.fill(0); return; }
-                        const s = out[segNames[curSeg]];
+                        const targets = [out[segNames[curSeg]], out['全站']];
                         const views = curEx ? [0, 1] : [0, 2];
                         // 這一局的加購費按各格投注比例攤: 每 1 元格注要多負擔 k 元。
                         // 分母用該局自己的格注總額(rGrid), 不用掃描時累到的和 —— 後者只有在
@@ -3591,7 +3650,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const k = curGrid > 0 ? curFee / curGrid : 0;
                         for (let c = 0; c < 9; c++) {
                             if (sRows[c] === 0) continue;
-                            for (const v of views) {
+                            for (const v of views) for (const s of targets) {
+                                if (!s) continue;
                                 const cs = s.v[v][c];
                                 cs.bet += sBet[c]; cs.cost += sBet[c] * (1 + k);
                                 cs.payout += sPay[c]; cs.rows += sRows[c]; cs.rounds += 1;
@@ -3599,8 +3659,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 if (sPay[c] > sBet[c]) cs.winRounds += 1;
                                 if (curEx) cs.exRounds += 1;
                                 if (curAcc >= 0) s.seen[v][c][curAcc] = 1;
+                                cs.base += sBase[c]; cs.free += sFree[c]; cs.paid += sPaid[c]; cs.jp += sJp[c];
+                                // 二級是殘差, 跟卡片上那份用同一個定義
+                                cs.bonus += sPay[c] - (sBase[c] + sFree[c] + sPaid[c] + sJp[c]);
                             }
                             sBet[c] = 0; sPay[c] = 0; sRows[c] = 0;
+                            sBase[c] = 0; sFree[c] = 0; sPaid[c] = 0; sJp[c] = 0;
                         }
                     };
                     for (let i = 0; i < nb; i++) {
@@ -3610,6 +3674,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const c = billCell[i] - 1;
                         if (c < 0 || c > 8) continue;
                         sBet[c] += billBet[i]; sPay[c] += billPayout[i]; sRows[c] += 1;
+                        sBase[c] += billBase[i]; sFree[c] += billFree[i];
+                        sPaid[c] += billPaid[i]; sJp[c] += billJp[i];
                     }
                     flush();
 
@@ -3659,7 +3725,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         rtp: c.cost > 0 ? c.payout / c.cost * 100 : 0,
                         avgBet: c.rounds > 0 ? c.cost / c.rounds : 0,
                         hitPct: c.rounds > 0 ? c.hitRounds / c.rounds * 100 : 0,
-                        exRoundPct: c.rounds > 0 ? c.exRounds / c.rounds * 100 : 0
+                        exRoundPct: c.rounds > 0 ? c.exRounds / c.rounds * 100 : 0,
+                        // 組成的分母跟這一格的 RTP 同一個(含攤入的加購費), 所以五項相加 = 此格 RTP
+                        parts: COMP_PARTS.map(x => ({ ...x, pct: c.cost > 0 ? c[x.k] / c.cost * 100 : 0 }))
                     };
                 };
 
@@ -3690,10 +3758,15 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0,
                         comp: { all: blankComp(), ex: blankComp(), plain: blankComp() },
                         });
+                    // 「全站」也做成一個分群 —— 這樣卡片、RTP 組成、逐格明細那些現成的東西
+                    // 全部不用改就能直接顯示不分群的結果, 也不會有兩套算法各自漂移的風險。
+                    // 每位玩家只屬於一個分群, 所以往全站累加不會重複計數。
+                    const ALL_SEG = '全站';
                     const clusters = {
                         '高價值玩家': initStats(),
                         '中階玩家': initStats(),
-                        '休閒玩家': initStats()
+                        '休閒玩家': initStats(),
+                        [ALL_SEG]: initStats()
                     };
 
                     Object.values(playersMap.value).forEach(p => {
@@ -3704,28 +3777,30 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
 
                         p.segment = segment;
                         
-                        clusters[segment].count++;
-                        clusters[segment].turnover += p.totalTurnover;
-                        clusters[segment].payout += p.totalPayout;
-                        clusters[segment].grids += p.totalGrids;
-                        if (p.placeCounts) {
-                            for (let i = 0; i < 9; i++) clusters[segment].placeCounts[i] += p.placeCounts[i];
-                        }
-                        clusters[segment].rounds += p.roundsCount;
-                        clusters[segment].hitRounds += p.totalHitRounds;
-                        clusters[segment].winRounds += p.totalWinRounds;
-                        clusters[segment].exbetRounds += p.exbetRounds;
-                        if (p.exbetRounds > 0) clusters[segment].exbetPlayers += 1;
-                        ['all', 'ex', 'plain'].forEach(k => {
-                            const src = p.comp[k], dst = clusters[segment].comp[k];
-                            dst.bet += src.bet; dst.payout += src.payout; dst.rounds += src.rounds;
-                            dst.hitRounds += src.hitRounds; dst.winRounds += src.winRounds;
-                            dst.base += src.base; dst.free += src.free; dst.paid += src.paid;
-                            dst.jp += src.jp; dst.bonus += src.bonus;
-                            for (let i = 0; i < 7; i++) dst.bonusLv[i] += src.bonusLv[i];
-                            for (let i = 1; i < 6; i++) {
-                                dst.bonusReach[i] += src.bonusReach[i]; dst.bonusBomb[i] += src.bonusBomb[i];
-                            }
+                        // 同時累到自己的分群與「全站」。每位玩家只屬於一個分群, 所以不會重複計數。
+                        [segment, ALL_SEG].forEach(sg => {
+                            const cl = clusters[sg];
+                            cl.count++;
+                            cl.turnover += p.totalTurnover;
+                            cl.payout += p.totalPayout;
+                            cl.grids += p.totalGrids;
+                            if (p.placeCounts) for (let i = 0; i < 9; i++) cl.placeCounts[i] += p.placeCounts[i];
+                            cl.rounds += p.roundsCount;
+                            cl.hitRounds += p.totalHitRounds;
+                            cl.winRounds += p.totalWinRounds;
+                            cl.exbetRounds += p.exbetRounds;
+                            if (p.exbetRounds > 0) cl.exbetPlayers += 1;
+                            ['all', 'ex', 'plain'].forEach(k => {
+                                const src = p.comp[k], dst = cl.comp[k];
+                                dst.bet += src.bet; dst.payout += src.payout; dst.rounds += src.rounds;
+                                dst.hitRounds += src.hitRounds; dst.winRounds += src.winRounds;
+                                dst.base += src.base; dst.free += src.free; dst.paid += src.paid;
+                                dst.jp += src.jp; dst.bonus += src.bonus;
+                                for (let i = 0; i < 7; i++) dst.bonusLv[i] += src.bonusLv[i];
+                                for (let i = 1; i < 6; i++) {
+                                    dst.bonusReach[i] += src.bonusReach[i]; dst.bonusBomb[i] += src.bonusBomb[i];
+                                }
+                            });
                         });
                     });
                     
@@ -4949,8 +5024,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
                     cellDetailSeg, cellStatsOf, cellTotalsOf, openCellDetail, cellStats,
-                    cellView, cellViews: CELL_VIEWS,
-                    compView, compOpen, compOf, segView, compViews: COMP_VIEWS, compSingleViews: COMP_SINGLE_VIEWS,
+                    cellView, cellViews: CELL_VIEWS, cellCompOpen,
+                    compView, compOpen, compOf, segView, compViews: COMP_VIEWS,
+                    cardMode, shownSegments, compSingleViews: COMP_SINGLE_VIEWS,
                     compParts: COMP_PARTS, compMaxRtp, refundedBills,
                     playerStale, isRecomputing, recomputeNote,
                     showRtpTargetAll,
