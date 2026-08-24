@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.60</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.61</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1100,10 +1100,18 @@
                     class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-10">✕</button>
 
                 <div class="px-6 py-4 border-b border-white/10">
+                    <div class="flex flex-wrap items-center gap-3 mb-1">
                     <h3 class="text-xl font-bold text-white">
                         逐格明細 ·
                         <span :class="{'text-indigo-400': cellDetailSeg==='高價值玩家', 'text-cyan-400': cellDetailSeg==='中階玩家', 'text-gray-400': cellDetailSeg==='休閒玩家'}">{{ cellDetailSeg }}</span>
                     </h3>
+                        <div class="flex rounded overflow-hidden border border-white/10">
+                            <button v-for="v in cellViews" :key="v.k" @click="cellView = v.k"
+                                class="px-3 py-1 text-xs transition-colors"
+                                :class="cellView === v.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">{{ v.t }}</button>
+                        </div>
+                        <span class="text-[11px] text-gray-500">以「局」為單位切分</span>
+                    </div>
                     <p class="text-xs text-gray-500 mt-1">
                         每一格只統計「押在該格」的注單（Bet Place 1~9），<span class="text-amber-300">分母不含 EXBET 加購費</span> ——
                         那筆錢無格可歸，所以逐格 RTP 會系統性高於卡片上的群體 RTP。
@@ -1115,24 +1123,33 @@
                     <!-- 對帳列。九格加總不等於卡片上的群體數字, 差額就是 EXBET 加購費(那筆錢無格可歸),
                          兩個口徑一起列出來, 讀的人才不會拿逐格 RTP 去跟卡片的群體 RTP 比。 -->
                     <div v-if="cellTotalsOf(cellDetailSeg)" class="mb-4 text-xs bg-slate-900/60 rounded-lg px-4 py-3 space-y-1">
-                        <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                        <div v-if="cellTotalsOf(cellDetailSeg).isAll" class="flex flex-wrap items-center gap-x-6 gap-y-1">
                             <span class="text-gray-400">九格合計投注
                                 <span class="font-mono text-white ml-1">{{ formatMoney(cellTotalsOf(cellDetailSeg).bet) }}</span></span>
                             <span class="text-gray-400">＋ EXBET 加購費
                                 <span class="font-mono text-gray-300 ml-1">{{ formatMoney(cellTotalsOf(cellDetailSeg).exbetBet) }}</span></span>
                             <span class="text-gray-400">＝ 群總投注
                                 <span class="font-mono text-white ml-1">{{ formatMoney(cellTotalsOf(cellDetailSeg).segTurnover) }}</span></span>
-                            <span v-if="Math.abs(cellTotalsOf(cellDetailSeg).diff) > 0.01" class="text-amber-400">
+                            <span v-if="cellTotalsOf(cellDetailSeg).isAll && Math.abs(cellTotalsOf(cellDetailSeg).diff) > 0.01" class="text-amber-400">
                                 對不上，差 {{ formatMoney(cellTotalsOf(cellDetailSeg).diff) }}
                             </span>
                         </div>
-                        <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
-                            <span class="text-gray-400">九格合計 RTP
-                                <span class="font-mono font-bold ml-1" :class="cellTotalsOf(cellDetailSeg).rtp >= 100 ? 'text-red-400' : 'text-green-400'">
-                                    {{ cellTotalsOf(cellDetailSeg).rtp.toFixed(2) }}%</span>
-                                <span class="text-gray-600 ml-1">← 下面各格的 RTP 要跟這個比</span></span>
-                            <span class="text-gray-500">群體 RTP（分母含加購費）
-                                <span class="font-mono ml-1">{{ cellTotalsOf(cellDetailSeg).segRtp.toFixed(2) }}%</span></span>
+                        <!-- 兩個 RTP 並排會被讀成「同一個東西有兩個值」。改成寫出推導:
+                             分子(總派彩)完全相同, 只是分母一個含加購費一個不含。 -->
+                        <div class="text-gray-400 leading-relaxed">
+                            <span class="text-gray-300">下面各格的 RTP 要跟這個比：</span>
+                            <span class="font-mono font-bold mx-1" :class="cellTotalsOf(cellDetailSeg).rtp >= 100 ? 'text-red-400' : 'text-green-400'">
+                                {{ cellTotalsOf(cellDetailSeg).rtp.toFixed(2) }}%</span>
+                            <template v-if="cellTotalsOf(cellDetailSeg).isAll">
+                                <br>
+                                <span class="text-gray-500">
+                                    它跟卡片上的群體 RTP
+                                    <span class="font-mono">{{ cellTotalsOf(cellDetailSeg).segRtp.toFixed(2) }}%</span>
+                                    是同一筆派彩、不同分母 —— 把
+                                    <span class="font-mono">{{ cellTotalsOf(cellDetailSeg).exSharePct.toFixed(1) }}%</span>
+                                    的 EXBET 加購費也算進分母就會變成後者（EXBET 那一列的派彩恆為 0，所以分子不變）。
+                                </span>
+                            </template>
                         </div>
                     </div>
                     <div v-else class="mb-4 text-xs text-gray-500">計算中…</div>
@@ -1142,25 +1159,32 @@
                             <template v-if="cellStatsOf(cellDetailSeg, place)">
                                 <div class="flex items-baseline justify-between mb-3">
                                     <span class="text-2xl font-extrabold text-white">{{ place }}</span>
-                                    <span class="text-[11px] text-gray-400">
-                                        占該群格注 <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).sharePct.toFixed(2) }}%</span>
+                                    <span class="text-[11px] text-gray-400 cursor-help"
+                                        title="這一格的參與人次 / 九格參與人次總和。是人次不是人數 —— 九格加起來恰好 100%；「押過此格玩家」那個是人數，九格加總可以到 900%。">
+                                        占九格人次 <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).sharePct.toFixed(2) }}%</span>
                                         <span class="text-gray-600">（均勻 11.11%）</span>
                                     </span>
                                 </div>
                                 <div class="space-y-1 text-xs">
                                     <div class="flex justify-between"
-                                        title="押過這格的不重複玩家數 / 該群玩家數。一位玩家最多同時計入 9 格，所以九格的百分比加總可以到 900% —— 這不是組成比例。老玩家幾乎必然碰過每一格，所以這個數字會飽和，跨群比較請看下面的「平均每人筆數」。">
+                                        title="押過這格的不重複玩家數 / 該群玩家數。一位玩家最多同時計入 9 格，所以九格的百分比加總可以到 900% —— 這不是組成比例。老玩家幾乎必然碰過每一格，所以這個數字會飽和，跨群比較請看下面的「平均每人次數」。">
                                         <span class="text-gray-400 border-b border-dashed border-gray-600">押過此格玩家</span>
                                         <span class="font-mono text-white">{{ cellStatsOf(cellDetailSeg, place).players.toLocaleString() }}
                                             <span class="text-gray-500">（{{ cellStatsOf(cellDetailSeg, place).playersPct.toFixed(1) }}%）</span></span></div>
-                                    <div class="flex justify-between" title="該格押注筆數 / 押過該格的玩家數 —— 人數會飽和，這個才是跨群可比的偏好強度">
-                                        <span class="text-gray-400 border-b border-dashed border-gray-600">平均每人筆數</span>
+                                    <div class="flex justify-between" title="該格參與人次 / 押過該格的玩家數 —— 人數會飽和，這個才是跨群可比的偏好強度">
+                                        <span class="text-gray-400 border-b border-dashed border-gray-600">平均每人次數</span>
                                         <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).rowsPerPlayer.toFixed(1) }}</span></div>
                                     <div class="flex justify-between"><span class="text-gray-400">參與人次</span>
                                         <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).rounds.toLocaleString() }}</span></div>
-                                    <div class="flex justify-between"><span class="text-gray-400">押注筆數</span>
-                                        <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).rows.toLocaleString() }}</span></div>
-                                    <div class="flex justify-between"><span class="text-gray-400">平均每筆</span>
+                                    <!-- 押注筆數在實測 158 萬列裡恆等於參與人次(同一局同一格不會有兩張單),
+                                         所以平常不列。萬一哪天資料真的出現重複, 這一行會冒出來,
+                                         而不是讓「平均每次」靜默用錯分母。 -->
+                                    <div v-if="cellStatsOf(cellDetailSeg, place).rows !== cellStatsOf(cellDetailSeg, place).rounds"
+                                        class="flex justify-between text-amber-400"
+                                        title="同一局同一格出現多張注單 —— 這在過去的資料裡沒發生過">
+                                        <span>押注筆數（≠人次）</span>
+                                        <span class="font-mono">{{ cellStatsOf(cellDetailSeg, place).rows.toLocaleString() }}</span></div>
+                                    <div class="flex justify-between"><span class="text-gray-400">平均每次</span>
                                         <span class="font-mono text-gray-200">{{ formatMoney(cellStatsOf(cellDetailSeg, place).avgBet) }}</span></div>
 
                                     <div class="pt-1.5 mt-1.5 border-t border-white/5"></div>
@@ -1180,11 +1204,7 @@
                                     <div class="flex justify-between" title="該格派彩 > 0 的人次 / 押過該格的人次。命中完全由該局落球決定，與玩家押多少無關 —— 各格之間的差異反映的是落球分布，不是玩家技巧。">
                                         <span class="text-gray-400 border-b border-dashed border-gray-600">Hit Rate</span>
                                         <span class="font-mono text-green-400">{{ cellStatsOf(cellDetailSeg, place).hitPct.toFixed(2) }}%</span></div>
-                                    <div class="flex justify-between" title="押過該格的玩家中，有用過 EXBET 的比例">
-                                        <span class="text-gray-400 border-b border-dashed border-gray-600">用過 EXBET 玩家</span>
-                                        <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).exPlayersPct.toFixed(1) }}%
-                                            <span class="text-gray-500">（{{ cellStatsOf(cellDetailSeg, place).exPlayers.toLocaleString() }} 人）</span></span></div>
-                                    <div class="flex justify-between" title="押該格時同一局也買了 EXBET 的人次 / 押過該格的人次">
+                                    <div v-if="cellView === 0" class="flex justify-between" title="押該格時同一局也買了 EXBET 的人次 / 押過該格的人次。切到「有 EX / 沒 EX」時這個數字必然是 100% / 0%，所以只在「全體」顯示。">
                                         <span class="text-gray-400 border-b border-dashed border-gray-600">EXBET 局數占比</span>
                                         <span class="font-mono text-gray-200">{{ cellStatsOf(cellDetailSeg, place).exRoundPct.toFixed(1) }}%</span></div>
                                 </div>
@@ -1193,8 +1213,8 @@
                         </div>
                     </div>
                     <p class="text-[11px] text-gray-500 mt-4 leading-relaxed">
-                        「參與人次」是押過該格的 (局, 玩家) 數；「押注筆數」是注單列數 ——
-                        同一局同一格押兩筆時後者會多算，所以 Hit Rate 的分母用前者，「平均每筆」的分母用後者。<br>
+                        「參與人次」是押過該格的不重複 (局, 玩家) 數，也是 Hit Rate 與「平均每次」的分母。
+                        實測 158 萬列注單中，同一局同一格從未出現兩張單，所以它同時也等於注單列數。<br>
                         沒有列出「Win Rate」：單一格的最低賠率是 2 倍，所以只要命中就必然獲利，Win Rate 會恆等於 Hit Rate。<br>
                         沒有列出「平均單局押注格數」：那是一局的性質，不是一格的性質。
                     </p>
@@ -3442,6 +3462,9 @@
 
                 // 盤面押注偏好的二級畫面。存分群名稱而不是布林 —— 一次只看一群, 而且要知道是哪一群。
                 const cellDetailSeg = ref(null);
+                // 逐格明細自己的視角。跟卡片那排分開 —— 那排多一個「三種並列」, 而且這是獨立的深入檢視。
+                const CELL_VIEWS = [{ k: 0, t: '全體' }, { k: 1, t: '有 EX' }, { k: 2, t: '沒 EX' }];
+                const cellView = ref(0);
 
                 // ===== 逐格明細 =====
                 // 為什麼是「開畫面才算」而不是跟著聚合一起算: 逐格是 9 倍寬的累加, 而 rebuildFromRounds
@@ -3459,31 +3482,39 @@
                 const computeCellStats = () => {
                     const rounds = allRounds.value;
                     const players = playersMap.value || {};
+                    const accIdx = new Map();          // 帳號 -> 序號, 給下面的「押過這格的人」用位元表計數
+                    const segOf = [];                  // 每個 round 屬於哪一群(序號), -1 = 不在範圍或無分群
                     const out = {};
+                    const VIEWS = ['all', 'ex', 'plain'];
                     const mk = () => ({
-                        cells: Array.from({ length: 9 }, blankCell),
-                        cellPlayers: new Array(9).fill(0), cellExPlayers: new Array(9).fill(0),
-                        exbetBet: 0
-                    });
-                    // 人數是集合基數, 不是可加量, 從 round 相加永遠得不到。
-                    // 但 placeCounts 已經是「此範圍內該玩家各格的累計筆數」, 直接當「碰過這格」的判準就好。
-                    Object.values(players).forEach(p => {
-                        const s = out[p.segment] || (out[p.segment] = mk());
-                        s.exbetBet += p.exbetBet;          // 這筆錢無格可歸, 對帳列要用
-                        const ex = p.exbetRounds > 0;
-                        for (let i = 0; i < 9; i++) if (p.placeCounts[i] > 0) {
-                            s.cellPlayers[i]++;
-                            if (ex) s.cellExPlayers[i]++;
-                        }
+                        // 三個視角各一份九格。掃描時本來就知道這一局有沒有買 EXBET, 所以順手分桶,
+                        // 不必為了拆視角再掃一次。
+                        v: VIEWS.map(() => Array.from({ length: 9 }, blankCell)),
+                        // 押過這格的不重複玩家。用「玩家序號 + 位元表」而不是 Set:
+                        // 3 視角 x 9 格的 Set 在 9 萬玩家下會配出上百萬個字串參照, 位元表只要 2.5MB。
+                        seen: VIEWS.map(() => Array.from({ length: 9 }, () => null)),
+                        exbetBet: 0, nPlayers: 0
                     });
 
-                    // 先把每個 round 的「在不在範圍內」與「屬於哪一群」壓成兩條平行陣列。
-                    // 這樣下面掃 180 萬列注單時完全不必碰 reactive 物件 —— 碰了就會逐個生 Proxy。
+                    let np = 0;
+                    Object.values(players).forEach(p => {
+                        accIdx.set(p.account, np++);
+                        const s = out[p.segment] || (out[p.segment] = mk());
+                        s.exbetBet += p.exbetBet;      // 這筆錢無格可歸, 對帳列要用
+                    });
+                    Object.values(out).forEach(s => {
+                        s.nPlayers = np;
+                        for (let v = 0; v < 3; v++) for (let c = 0; c < 9; c++) s.seen[v][c] = new Uint8Array(np);
+                    });
+
+                    // 先把每個 round 的「在不在範圍內 / 屬於哪一群 / 有沒有買 EXBET」壓成平行陣列,
+                    // 這樣下面掃百萬列注單時完全不必碰 reactive 物件 —— 碰了就會逐個生 Proxy。
                     const segNames = Object.keys(out);
                     const segIdx = {}; segNames.forEach((k, i) => segIdx[k] = i);
                     const n = rounds.length;
                     const rSeg = new Int8Array(n).fill(-1);
                     const rEx = new Uint8Array(n);
+                    const rAcc = new Int32Array(n).fill(-1);
                     const full = rangeIsFull.value;
                     for (let i = 0; i < n; i++) {
                         const r = rounds[i];
@@ -3491,41 +3522,55 @@
                         const p = players[r.account];
                         if (!p || segIdx[p.segment] === undefined) continue;
                         rSeg[i] = segIdx[p.segment];
+                        rAcc[i] = accIdx.get(r.account);
                         // 判定照抄 addRoundToAgg: 舊匯出檔會掉 Bet Place 10 那一列, 只看 exbetCount
                         // 會把那幾局歸進「沒買」, 明細與卡片就會出現無法解釋的落差。
                         rEx[i] = (r.exbetCount > 0 || r.hasExtra) ? 1 : 0;
                     }
 
-                    // 命中/獲利是「這一局這一格」的事, 不是單筆的事 —— 同一局同一格下兩張單看到同一顆球,
-                    // 逐筆判斷會把同一次落球當成兩個獨立試驗, 讓那一局在比率裡被雙倍加權。
-                    // 所以先按 (round, cell) 合併, 合併後再判斷。注單是逐局連續排列的, 用「換 round 就結算」
-                    // 這種掃法就不必配 hash。
+                    // 命中/獲利是「這一局這一格」的事, 不是單筆的事 —— 同一局同一格若有兩張單會看到
+                    // 同一顆球, 逐筆判斷會把一次落球當成兩個獨立試驗。所以先按 (round, cell) 合併再判斷。
+                    // 注單是逐局連續排列的, 用「換 round 就結算」的掃法就不必配 hash。
                     const nb = billRound ? billRound.length : 0;
                     const sBet = new Float64Array(9), sPay = new Float64Array(9);
                     const sRows = new Int32Array(9);
-                    let cur = -1, curSeg = -1, curEx = 0;
+                    let cur = -1, curSeg = -1, curEx = 0, curAcc = -1;
                     const flush = () => {
                         if (curSeg < 0) { sBet.fill(0); sPay.fill(0); sRows.fill(0); return; }
                         const s = out[segNames[curSeg]];
+                        const views = curEx ? [0, 1] : [0, 2];
                         for (let c = 0; c < 9; c++) {
                             if (sRows[c] === 0) continue;
-                            const cs = s.cells[c];
-                            cs.bet += sBet[c]; cs.payout += sPay[c]; cs.rows += sRows[c]; cs.rounds += 1;
-                            if (sPay[c] > 0) cs.hitRounds += 1;
-                            if (sPay[c] > sBet[c]) cs.winRounds += 1;
-                            if (curEx) cs.exRounds += 1;
+                            for (const v of views) {
+                                const cs = s.v[v][c];
+                                cs.bet += sBet[c]; cs.payout += sPay[c]; cs.rows += sRows[c]; cs.rounds += 1;
+                                if (sPay[c] > 0) cs.hitRounds += 1;
+                                if (sPay[c] > sBet[c]) cs.winRounds += 1;
+                                if (curEx) cs.exRounds += 1;
+                                if (curAcc >= 0) s.seen[v][c][curAcc] = 1;
+                            }
                             sBet[c] = 0; sPay[c] = 0; sRows[c] = 0;
                         }
                     };
                     for (let i = 0; i < nb; i++) {
                         const ri = billRound[i];
-                        if (ri !== cur) { flush(); cur = ri; curSeg = rSeg[ri]; curEx = rEx[ri]; }
+                        if (ri !== cur) { flush(); cur = ri; curSeg = rSeg[ri]; curEx = rEx[ri]; curAcc = rAcc[ri]; }
                         if (curSeg < 0) continue;
                         const c = billCell[i] - 1;
                         if (c < 0 || c > 8) continue;
                         sBet[c] += billBet[i]; sPay[c] += billPayout[i]; sRows[c] += 1;
                     }
                     flush();
+
+                    // 位元表換成人數, 換完就丟 —— 這幾張表加起來 2.5MB, 沒必要留著
+                    Object.values(out).forEach(s => {
+                        s.players = s.seen.map(vv => vv.map(arr => {
+                            let k = 0;
+                            for (let i = 0; i < arr.length; i++) k += arr[i];
+                            return k;
+                        }));
+                        s.seen = null;
+                    });
                     cellStats.value = { stamp: cellStamp(), segs: out };
                 };
 
@@ -3542,20 +3587,19 @@
                 const cellStatsOf = (seg, place) => {
                     const cs = cellStats.value;
                     if (!cs || !cs.segs[seg]) return null;
-                    const s = cs.segs[seg], c = s.cells[place - 1];
-                    const allRows = s.cells.reduce((a, x) => a + x.rows, 0);
+                    const s = cs.segs[seg], v = cellView.value;
+                    const c = s.v[v][place - 1];
+                    const allRows = s.v[v].reduce((a, x) => a + x.rows, 0);
                     const segCount = (clusterStats.value[seg] || {}).count || 0;
+                    const nPlayers = s.players[v][place - 1];
                     return {
                         place,
-                        players: s.cellPlayers[place - 1],
+                        players: nPlayers,
                         // 一位玩家最多同時計入 9 格, 所以九格的百分比加總可以到 900% —— 這不是組成比例
-                        playersPct: segCount > 0 ? s.cellPlayers[place - 1] / segCount * 100 : 0,
-                        exPlayers: s.cellExPlayers[place - 1],
-                        exPlayersPct: s.cellPlayers[place - 1] > 0
-                            ? s.cellExPlayers[place - 1] / s.cellPlayers[place - 1] * 100 : 0,
+                        playersPct: segCount > 0 ? nPlayers / segCount * 100 : 0,
                         rounds: c.rounds, rows: c.rows,
                         // 這個才是跨群可比的量: 人數會飽和(重玩家幾乎必然碰過九格)
-                        rowsPerPlayer: s.cellPlayers[place - 1] > 0 ? c.rows / s.cellPlayers[place - 1] : 0,
+                        rowsPerPlayer: nPlayers > 0 ? c.rounds / nPlayers : 0,
                         sharePct: allRows > 0 ? c.rows / allRows * 100 : 0,
                         bet: c.bet, payout: c.payout, ggr: c.bet - c.payout,
                         rtp: c.bet > 0 ? c.payout / c.bet * 100 : 0,
@@ -3570,16 +3614,20 @@
                     const cs = cellStats.value;
                     const st = clusterStats.value[seg] || {};
                     if (!cs || !cs.segs[seg]) return null;
-                    const s = cs.segs[seg];
-                    const bet = s.cells.reduce((a, c) => a + c.bet, 0);
-                    const payout = s.cells.reduce((a, c) => a + c.payout, 0);
+                    const s = cs.segs[seg], v = cellView.value;
+                    const bet = s.v[v].reduce((a, c) => a + c.bet, 0);
+                    const payout = s.v[v].reduce((a, c) => a + c.payout, 0);
                     return {
                         bet, payout, exbetBet: s.exbetBet,
+                        // 兩個 RTP 的差就只在這裡: 分子相同(EXBET 那一列派彩恆為 0),
+                        // 分母一個含加購費一個不含, 比值恰好等於 1 - exSharePct。
+                        exSharePct: (st.turnover || 0) > 0 ? s.exbetBet / st.turnover * 100 : 0,
                         rtp: bet > 0 ? payout / bet * 100 : 0,
                         segTurnover: st.turnover || 0,
                         segRtp: st.turnover > 0 ? st.payout / st.turnover * 100 : 0,
-                        // 這個差額應該恰好是 0: 九格投注 + 加購費 = 群總投注
-                        diff: (st.turnover || 0) - bet - s.exbetBet
+                        // 只有「全體」視角能跟群體對帳: 有EX/沒EX 是局的子集, 本來就不會等於群總投注
+                        diff: v === 0 ? (st.turnover || 0) - bet - s.exbetBet : null,
+                        isAll: v === 0
                     };
                 };
 
@@ -4845,6 +4893,7 @@
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
                     cellDetailSeg, cellStatsOf, cellTotalsOf, openCellDetail, cellStats,
+                    cellView, cellViews: CELL_VIEWS,
                     compView, compOpen, compOf, compViews: COMP_VIEWS, compSingleViews: COMP_SINGLE_VIEWS,
                     compParts: COMP_PARTS, compMaxRtp, refundedBills,
                     playerStale, isRecomputing, recomputeNote,
