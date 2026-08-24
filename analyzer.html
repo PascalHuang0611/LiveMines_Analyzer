@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.63</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.65</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1127,6 +1127,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 :class="cellView === v.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">{{ v.t }}</button>
                         </div>
                         <span class="text-[11px] text-gray-500">以「局」為單位切分</span>
+                        <button @click="exportCellDetailPng"
+                            class="px-3 py-1 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
+                            title="照盤面 3x3 匯出目前這個視角的九格。直接截圖會被彈窗捲軸切掉，而且九張卡在畫面上是響應式排列，未必是 3x3。">
+                            匯出 PNG
+                        </button>
                         <button @click="cellCompOpen = !cellCompOpen"
                             class="text-[11px] transition-colors border rounded px-2 py-1"
                             :class="cellCompOpen ? 'text-indigo-300 border-indigo-400/40 bg-indigo-500/10' : 'text-gray-400 border-white/10 hover:bg-white/5'"
@@ -2501,6 +2506,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 const showBetTrendModal = ref(false);
                 const showHeatmapModal = ref(false);  // 落球熱力圖的放大檢視
                 const showNicknameModal = ref(false); // 暱稱變更紀錄
+                // 盤面押注偏好的逐格明細。存分群名稱而不是布林 —— 一次只看一群, 而且要知道是哪一群。
+                // 跟其他 modal 旗標放在一起, 是為了讓下面那個捲動鎖的清單好維護。
+                const cellDetailSeg = ref(null);
                 const showRtpTargetAll = ref(false);  // 拉高 RTP 的局: 展開全部
                 const NICK_PREVIEW = 7;               // 標題列最多先列幾個暱稱
                 // 顆粒度記住上次的選擇 —— 每次開圖都要重設很煩
@@ -2847,12 +2855,14 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 });
 
 
-                watch([selectedPlayer, showChartModal, showBetTrendModal, showHeatmapModal, showNicknameModal], ([player, chart, trend, heat, nick]) => {
-                    if (player || chart || trend || heat || nick) {
-                        document.body.style.overflow = 'hidden';
-                    } else {
-                        document.body.style.overflow = '';
-                    }
+                // 開著任何一個 modal 就鎖住底層的捲動, 否則滾滑鼠會滾到後面那一頁, 關掉之後位置也跑掉。
+                // 這是手動清單 —— 新增 modal 一定要加進來。原本的寫法把旗標列在三個地方
+                // (來源陣列、解構參數、if 條件), 漏改任一處就失效; 改成 some(Boolean) 只剩一處要維護。
+                // 實際上就漏過一次: 逐格明細的 cellDetailSeg 加進來之前, 開著它捲動並沒有被鎖住。
+                const MODAL_FLAGS = [selectedPlayer, showChartModal, showBetTrendModal,
+                    showHeatmapModal, showNicknameModal, cellDetailSeg];
+                watch(MODAL_FLAGS, (vals) => {
+                    document.body.style.overflow = vals.some(Boolean) ? 'hidden' : '';
                 });
 
                 const handleTableScroll = (e) => {
@@ -3554,8 +3564,6 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     return m || 100;
                 });
 
-                // 盤面押注偏好的二級畫面。存分群名稱而不是布林 —— 一次只看一群, 而且要知道是哪一群。
-                const cellDetailSeg = ref(null);
                 // 逐格明細自己的視角。跟卡片那排分開 —— 那排多一個「三種並列」, 而且這是獨立的深入檢視。
                 const CELL_VIEWS = [{ k: 0, t: '全體' }, { k: 1, t: '有 EX' }, { k: 2, t: '沒 EX' }];
                 const cellView = ref(0);
@@ -3752,6 +3760,228 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         diff: v === 0 ? (st.turnover || 0) - bet : null,
                         isAll: v === 0
                     };
+                };
+
+                // 逐格明細匯出 PNG。跟落球熱力圖同一套做法(canvas, 兩倍解析度), 因為 PM 要把這張貼進週報:
+                // 直接截圖會被彈窗的捲軸切掉, 而且九張卡在畫面上是 1/2/3 欄的響應式排列, 截出來未必是 3x3。
+                // 這裡固定照盤面 3x3 畫, 讀的人才對得上實際版面。
+                const exportCellDetailPng = () => {
+                    const seg = cellDetailSeg.value;
+                    const tot = seg ? cellTotalsOf(seg) : null;
+                    // 第一次開畫面時 cellStats 還在算, 這時按下去就當沒事 —— 匯出半張空表比沒有更糟
+                    if (!tot) return;
+                    const cells = [];
+                    for (let p = 1; p <= 9; p++) cells.push(cellStatsOf(seg, p));
+                    if (cells.some(c => !c)) return;
+
+                    const S = 2;
+                    const FONT = '"Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif';
+                    const showComp = cellCompOpen.value;
+                    // 有EX/沒EX 視角下這個數字恆為 100%/0%, 畫面上不顯示, 這裡也跟著不畫
+                    const showEx = cellView.value === 0;
+                    // 任一格出現「同一局同一格兩張單」就九格整排都畫 —— 九張卡等高才排得整齊,
+                    // 而少了這一行會讓讀的人以為「平均每次」的分母是筆數。
+                    const showRows = cells.some(c => c.rows !== c.rounds);
+
+                    const SEP = { sep: true };
+                    const linesOf = (c) => {
+                        const L = [
+                            ['押過此格玩家', c.players.toLocaleString() + '（' + c.playersPct.toFixed(1) + '%）', '#e2e8f0'],
+                            ['平均每人次數', c.rowsPerPlayer.toFixed(1), '#cbd5e1'],
+                            ['參與人次', c.rounds.toLocaleString(), '#cbd5e1']
+                        ];
+                        if (showRows) L.push(['押注筆數（≠人次）', c.rows.toLocaleString(), '#fbbf24']);
+                        L.push(['平均每次', formatMoney(c.avgBet), '#cbd5e1'], SEP,
+                            ['總投注', formatMoney(c.cost), '#e2e8f0'],
+                            ['總派彩', formatMoney(c.payout), '#cbd5e1'],
+                            ['GGR', formatMoney(c.ggr), c.ggr >= 0 ? '#4ade80' : '#f87171'],
+                            ['此格 RTP', c.rtp.toFixed(2) + '%', c.rtp >= 100 ? '#f87171' : '#4ade80'], SEP,
+                            ['Hit Rate', c.hitPct.toFixed(2) + '%', '#4ade80']);
+                        if (showEx) L.push(['EXBET 局數占比', c.exRoundPct.toFixed(1) + '%', '#cbd5e1']);
+                        return L;
+                    };
+                    const rowsOf = cells.map(linesOf);
+
+                    const LH = 15, SEPH = 9, PAD = 12, HEAD = 26, CARD_W = 252, CARD_GAP = 10;
+                    const MARGIN = 24, TITLE = 56, RECON = 44;
+                    const BAR_H = 6, COMP_LH = 13;
+                    const compH = showComp ? SEPH + BAR_H + 5 + 5 * COMP_LH : 0;
+                    // 九格的行數本來就一樣(條件行是九格共用的旗標), 取 max 只是防呆
+                    const bodyH = Math.max(...rowsOf.map(L =>
+                        L.reduce((a, x) => a + (x.sep ? SEPH : LH), 0)));
+                    const CARD_H = PAD + HEAD + bodyH + compH + PAD;
+
+                    const W = MARGIN * 2 + 3 * CARD_W + 2 * CARD_GAP;
+                    const cv = document.createElement('canvas');
+                    const ctx = cv.getContext('2d');
+
+                    // 註腳要換行, 而換行數會影響畫布高度 —— 所以先用一個暫時的 context 量好再開真正的畫布
+                    const NOTE_W = W - MARGIN * 2;
+                    const wrap = (text, font) => {
+                        ctx.font = font;
+                        const out = [];
+                        let line = '';
+                        for (const ch of text) {
+                            if (ch === '\n') { out.push(line); line = ''; continue; }
+                            if (ctx.measureText(line + ch).width > NOTE_W && line) { out.push(line); line = ''; }
+                            line += ch;
+                        }
+                        if (line) out.push(line);
+                        return out;
+                    };
+                    const NOTE_FONT = '11px ' + FONT;
+                    const notes = wrap(
+                        '「參與人次」是押過該格的不重複 (局, 玩家) 數，也是 Hit Rate 與「平均每次」的分母。' +
+                        '單一格最低賠率 2 倍，命中必然獲利，所以沒有另列 Win Rate。\n' +
+                        '「總投注」已把該局的 EXBET 加購費按各格投注比例攤進成本 —— 加購費恰好是該局格注的 50%，' +
+                        '攤分是精確的。攤過之後九格加總等於卡片上的群體數字，各格 RTP 可直接跟群體 RTP 比。',
+                        NOTE_FONT);
+                    const FOOT = 14 + notes.length * 15;
+                    const H = MARGIN * 2 + TITLE + RECON + 3 * CARD_H + 2 * CARD_GAP + FOOT;
+
+                    cv.width = W * S; cv.height = H * S;
+                    ctx.scale(S, S);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(0, 0, W, H);
+                    ctx.textBaseline = 'top';
+
+                    // 標題。分群顏色照畫面上那組, 三張卡並排時 PM 是靠顏色認群的
+                    const SEG_COLOR = { '高價值玩家': '#818cf8', '中階玩家': '#22d3ee', '休閒玩家': '#9ca3af' };
+                    ctx.font = 'bold 20px ' + FONT;
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = '#e2e8f0';
+                    const t1 = '逐格明細 · ';
+                    ctx.fillText(t1, MARGIN, MARGIN);
+                    ctx.fillStyle = SEG_COLOR[seg] || '#e2e8f0';
+                    ctx.fillText(seg, MARGIN + ctx.measureText(t1).width, MARGIN);
+                    ctx.font = '13px ' + FONT;
+                    ctx.fillStyle = '#94a3b8';
+                    const viewName = (CELL_VIEWS.find(v => v.k === cellView.value) || {}).t || '全體';
+                    ctx.fillText(viewName + '　·　' + rangeTextShort(), MARGIN, MARGIN + 28);
+
+                    // 對帳列。跟畫面上同一組數字 —— 沒有它, 讀的人無從判斷九格加總有沒有蓋住整群
+                    const ry = MARGIN + TITLE;
+                    ctx.fillStyle = '#131c2e';
+                    ctx.fillRect(MARGIN, ry, W - MARGIN * 2, RECON - 10);
+                    let rx = MARGIN + 12;
+                    const seq = (parts) => parts.forEach(([txt, col, font]) => {
+                        ctx.font = font || '11px ' + FONT;
+                        ctx.fillStyle = col;
+                        ctx.fillText(txt, rx, ry + 6);
+                        rx += ctx.measureText(txt).width;
+                    });
+                    seq([
+                        ['九格合計（含攤入的加購費） ', '#94a3b8'],
+                        [formatMoney(tot.bet) + '　　', '#e2e8f0'],
+                        ['其中加購費 ', '#94a3b8'],
+                        [formatMoney(tot.exbetBet) + '　　', '#cbd5e1'],
+                        ['九格合計 RTP ', '#cbd5e1'],
+                        [tot.rtp.toFixed(2) + '%', tot.rtp >= 100 ? '#f87171' : '#4ade80', 'bold 12px ' + FONT],
+                        ['　＝ 卡片上此視角的群體 RTP', '#64748b']
+                    ]);
+                    if (tot.isAll && Math.abs(tot.diff) > 0.01) {
+                        ctx.font = '11px ' + FONT;
+                        ctx.fillStyle = '#fbbf24';
+                        ctx.textAlign = 'right';
+                        ctx.fillText('與群總投注差 ' + formatMoney(tot.diff), W - MARGIN - 12, ry + 6);
+                        ctx.textAlign = 'left';
+                    }
+
+                    // 九張卡, 照盤面 3x3
+                    const top0 = ry + RECON;
+                    cells.forEach((c, i) => {
+                        const cx = MARGIN + (i % 3) * (CARD_W + CARD_GAP);
+                        const cy = top0 + Math.floor(i / 3) * (CARD_H + CARD_GAP);
+                        ctx.fillStyle = '#1c2536';
+                        ctx.fillRect(cx, cy, CARD_W, CARD_H);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(cx + 0.5, cy + 0.5, CARD_W - 1, CARD_H - 1);
+
+                        ctx.textAlign = 'left';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 20px ' + FONT;
+                        ctx.fillText(String(c.place), cx + PAD, cy + PAD);
+                        ctx.textAlign = 'right';
+                        ctx.font = '10px ' + FONT;
+                        ctx.fillStyle = '#94a3b8';
+                        const sh = '占九格人次 ' + c.sharePct.toFixed(2) + '%';
+                        ctx.fillText(sh, cx + CARD_W - PAD, cy + PAD + 4);
+                        ctx.fillStyle = '#64748b';
+                        ctx.fillText('（均勻 11.11%）', cx + CARD_W - PAD, cy + PAD + 16);
+
+                        let y = cy + PAD + HEAD;
+                        rowsOf[i].forEach(row => {
+                            if (row.sep) {
+                                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                                ctx.beginPath();
+                                ctx.moveTo(cx + PAD, y + SEPH / 2 + 0.5);
+                                ctx.lineTo(cx + CARD_W - PAD, y + SEPH / 2 + 0.5);
+                                ctx.stroke();
+                                y += SEPH;
+                                return;
+                            }
+                            ctx.font = '11px ' + FONT;
+                            ctx.textAlign = 'left';
+                            ctx.fillStyle = row[0] === '押注筆數（≠人次）' ? '#fbbf24' : '#94a3b8';
+                            ctx.fillText(row[0], cx + PAD, y);
+                            ctx.textAlign = 'right';
+                            ctx.fillStyle = row[2];
+                            ctx.fillText(row[1], cx + CARD_W - PAD, y);
+                            y += LH;
+                        });
+
+                        if (showComp) {
+                            ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                            ctx.beginPath();
+                            ctx.moveTo(cx + PAD, y + SEPH / 2 + 0.5);
+                            ctx.lineTo(cx + CARD_W - PAD, y + SEPH / 2 + 0.5);
+                            ctx.stroke();
+                            y += SEPH;
+                            // 條的總長是「此格 RTP」, 各段按比例 —— 跟畫面上同一個算法
+                            const barW = CARD_W - PAD * 2;
+                            ctx.fillStyle = '#0b1120';
+                            ctx.fillRect(cx + PAD, y, barW, BAR_H);
+                            let bx2 = cx + PAD;
+                            c.parts.forEach(x => {
+                                const w = Math.max(0, x.pct / Math.max(0.01, c.rtp)) * barW;
+                                ctx.fillStyle = x.c;
+                                ctx.fillRect(bx2, y, w, BAR_H);
+                                bx2 += w;
+                            });
+                            y += BAR_H + 5;
+                            c.parts.forEach(x => {
+                                ctx.fillStyle = x.c;
+                                ctx.fillRect(cx + PAD, y + 3, 5, 5);
+                                ctx.font = '10px ' + FONT;
+                                ctx.textAlign = 'left';
+                                ctx.fillStyle = '#64748b';
+                                ctx.fillText(x.t, cx + PAD + 10, y);
+                                ctx.textAlign = 'right';
+                                ctx.fillStyle = x.pct > 0 ? '#cbd5e1' : '#475569';
+                                ctx.fillText(x.pct.toFixed(2) + '%', cx + CARD_W - PAD, y);
+                                y += COMP_LH;
+                            });
+                        }
+                    });
+
+                    // 註腳
+                    ctx.textAlign = 'left';
+                    ctx.font = NOTE_FONT;
+                    ctx.fillStyle = '#64748b';
+                    let ny = top0 + 3 * CARD_H + 2 * CARD_GAP + 14;
+                    notes.forEach(l => { ctx.fillText(l, MARGIN, ny); ny += 15; });
+
+                    cv.toBlob((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        // rangeStamp 內含「範圍還沒設定就寫全部日期」的守門, 否則會生出「__」這種檔名
+                        a.download = ('逐格明細_' + seg + '_' + viewName + '_' + rangeStamp() + '.png')
+                            .replace(/[\\/:*?"<>|]/g, '_');
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    }, 'image/png');
                 };
 
                 const computeClusters = () => {
@@ -5023,7 +5253,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     coverImage, coverFailed, showCover,
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
-                    cellDetailSeg, cellStatsOf, cellTotalsOf, openCellDetail, cellStats,
+                    cellDetailSeg, cellStatsOf, cellTotalsOf, openCellDetail, cellStats, exportCellDetailPng,
                     cellView, cellViews: CELL_VIEWS, cellCompOpen,
                     compView, compOpen, compOf, segView, compViews: COMP_VIEWS,
                     cardMode, shownSegments, compSingleViews: COMP_SINGLE_VIEWS,
