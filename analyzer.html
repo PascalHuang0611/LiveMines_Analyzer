@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.53</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.54</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -445,8 +445,8 @@
                 </div>
             </div>
 
-            <!-- 組成視角: 篩的是「局」不是玩家 -->
-            <div class="flex flex-wrap items-center gap-2 -mb-2">
+            <!-- 組成視角: 篩的是「局」不是玩家。收起時整排不出現, 面板才不會一眼太多字 -->
+            <div v-if="compOpen" class="flex flex-wrap items-center gap-2 -mb-2">
                 <span class="text-sm text-gray-400">RTP 組成</span>
                 <div class="flex rounded overflow-hidden border border-white/10">
                     <button v-for="v in compViews" :key="v.k" @click="compView = v.k"
@@ -487,39 +487,70 @@
                     </span></div>
 
                     <div class="space-y-2 mt-4">
-                        <div class="flex justify-between text-sm cursor-help" :title="`計算公式: 總派彩 / 總投注\n分子: ${formatMoney(clusterStats[seg]?.payout || 0)}\n分母: ${formatMoney(clusterStats[seg]?.turnover || 0)}`">
-                            <span class="text-gray-400 border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">群體 RTP</span>
+                        <div class="flex justify-between text-sm cursor-pointer select-none hover:text-white transition-colors"
+                            @click="compOpen = !compOpen"
+                            :title="(compOpen ? '收起' : '展開') + ' RTP 組成（一級 / 免費閃電 / 付費閃電 / 二級 / JP）'">
+                            <span class="text-gray-400 flex items-center gap-1">
+                                <span class="text-[10px] text-gray-500">{{ compOpen ? '▾' : '▸' }}</span>
+                                <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">群體 RTP</span>
+                            </span>
                             <span class="font-bold" :class="(clusterStats[seg]?.turnover > 0 ? (clusterStats[seg].payout / clusterStats[seg].turnover * 100) : 0) >= 100 ? 'text-red-400' : 'text-green-400'">
                                 {{ clusterStats[seg]?.turnover > 0 ? (clusterStats[seg].payout / clusterStats[seg].turnover * 100).toFixed(2) : '0.00' }}%
                             </span>
                         </div>
-                        <!-- RTP 組成: 拆成一級/免費閃電/付費閃電/二級/JP -->
-                        <template v-if="compOf(clusterStats[seg])">
-                            <div class="pt-2 pb-1">
-                                <div class="flex justify-between text-[11px] text-gray-400 mb-1">
-                                    <span>組成（{{ compViews.find(v => v.k === compView).t }}）</span>
-                                    <span class="font-mono">{{ compOf(clusterStats[seg]).rtp.toFixed(2) }}%</span>
+                        <!-- RTP 組成。預設收起 —— 五項 × 三分群一眼看過去資訊太多 -->
+                        <template v-if="compOpen">
+                            <!-- 三種並列: 每張卡都畫同樣三條, 所以跨分群與卡內都可比。
+                                 條長共用全域上限, 長度代表總 RTP、分段代表組成。 -->
+                            <div v-if="compView === 'compare'" class="pt-1 pb-1 space-y-2">
+                                <div v-for="v in compSingleViews" :key="v.k">
+                                    <template v-if="compOf(clusterStats[seg], v.k)">
+                                        <div class="flex justify-between text-[11px] mb-0.5">
+                                            <span class="text-gray-400">{{ v.t }}</span>
+                                            <span class="font-mono"
+                                                :class="compOf(clusterStats[seg], v.k).rtp >= 100 ? 'text-red-400' : 'text-gray-200'">
+                                                {{ compOf(clusterStats[seg], v.k).rtp.toFixed(2) }}%
+                                            </span>
+                                        </div>
+                                        <div class="flex h-2 rounded overflow-hidden bg-slate-900">
+                                            <div v-for="x in compOf(clusterStats[seg], v.k).parts" :key="x.k"
+                                                :style="{ width: Math.max(0, x.pct / compMaxRtp * 100) + '%', backgroundColor: x.c }"
+                                                :title="v.t + ' · ' + x.t + ' ' + x.pct.toFixed(2) + '%'"></div>
+                                        </div>
+                                    </template>
+                                    <div v-else class="text-[11px] text-gray-600">{{ v.t }} — 沒有資料</div>
                                 </div>
-                                <div class="flex h-2 rounded overflow-hidden bg-slate-900">
-                                    <div v-for="x in compOf(clusterStats[seg]).parts" :key="x.k"
-                                        :style="{ width: Math.max(0, x.pct / compOf(clusterStats[seg]).rtp * 100) + '%', backgroundColor: x.c }"
-                                        :title="x.t + ' ' + x.pct.toFixed(2) + '%'"></div>
-                                </div>
-                                <div class="mt-1.5 space-y-0.5">
-                                    <div v-for="x in compOf(clusterStats[seg]).parts" :key="'r'+x.k"
-                                        class="flex items-center justify-between text-[11px]">
-                                        <span class="flex items-center gap-1.5 text-gray-400">
-                                            <span class="w-2 h-2 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
-                                        </span>
-                                        <span class="font-mono" :class="x.pct > 0 ? 'text-gray-200' : 'text-gray-600'">{{ x.pct.toFixed(2) }}%</span>
-                                    </div>
-                                </div>
-                                <div class="text-[10px] text-gray-600 mt-1">
-                                    此視角 {{ compOf(clusterStats[seg]).rounds.toLocaleString() }} 人次 · 投注 {{ formatMoney(compOf(clusterStats[seg]).bet) }}
+                                <div class="flex flex-wrap gap-x-2.5 gap-y-0.5 pt-0.5">
+                                    <span v-for="x in compParts" :key="'l'+x.k" class="flex items-center gap-1 text-[10px] text-gray-500">
+                                        <span class="w-2 h-2 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
+                                    </span>
                                 </div>
                             </div>
+
+                            <!-- 單一視角: 條長撐滿, 只看內部比例 -->
+                            <template v-else-if="compOf(clusterStats[seg])">
+                                <div class="pt-1 pb-1">
+                                    <div class="flex h-2 rounded overflow-hidden bg-slate-900">
+                                        <div v-for="x in compOf(clusterStats[seg]).parts" :key="x.k"
+                                            :style="{ width: Math.max(0, x.pct / compOf(clusterStats[seg]).rtp * 100) + '%', backgroundColor: x.c }"
+                                            :title="x.t + ' ' + x.pct.toFixed(2) + '%'"></div>
+                                    </div>
+                                    <div class="mt-1.5 space-y-0.5">
+                                        <div v-for="x in compOf(clusterStats[seg]).parts" :key="'r'+x.k"
+                                            class="flex items-center justify-between text-[11px]">
+                                            <span class="flex items-center gap-1.5 text-gray-400">
+                                                <span class="w-2 h-2 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
+                                            </span>
+                                            <span class="font-mono" :class="x.pct > 0 ? 'text-gray-200' : 'text-gray-600'">{{ x.pct.toFixed(2) }}%</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-[10px] text-gray-600 mt-1">
+                                        此視角 {{ compOf(clusterStats[seg]).rounds.toLocaleString() }} 人次 · 投注 {{ formatMoney(compOf(clusterStats[seg]).bet) }}
+                                    </div>
+                                </div>
+                            </template>
+                            <div v-else class="text-[11px] text-gray-600 py-2">此視角沒有資料</div>
                         </template>
-                        <div v-else class="text-[11px] text-gray-600 py-2">此視角沒有資料</div>
 
                         <div class="flex justify-between text-sm cursor-help" :title="`定義: 該局贏分大於0\n分子 (Hit局數): ${clusterStats[seg]?.hitRounds?.toLocaleString() || 0}\n分母 (總參與人次): ${clusterStats[seg]?.rounds?.toLocaleString() || 0}`">
                             <span class="text-gray-400 border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">Hit Rate</span>
@@ -3140,12 +3171,18 @@
 
                 // 分群面板看哪一種局: 全體 / 有買 EXBET / 沒買。
                 // 這不是篩選玩家, 是篩選「局」—— 同一個玩家有些局買有些局沒買, 兩邊都會算到他。
-                const COMP_VIEWS = [
+                // 三張卡片刻意共用同一個視角: 它們存在的意義是互相比較, 各自可選就不再是比較。
+                // 想在卡內比三種視角就用 compare(三種並列) —— 每張卡都畫同樣三條, 跨分群仍然可比。
+                const COMP_SINGLE_VIEWS = [
                     { k: 'all', t: '全體' },
                     { k: 'ex', t: '有 EX' },
                     { k: 'plain', t: '沒 EX' }
                 ];
+                const COMP_VIEWS = COMP_SINGLE_VIEWS.concat([{ k: 'compare', t: '三種並列' }]);
                 const compView = ref(store.get('livemines_comp_view') || 'all');
+                // 預設收起。三張卡共用同一個展開狀態 —— 要比較就是一次看三張, 分開展開沒有意義。
+                const compOpen = ref(store.get('livemines_comp_open') === '1');
+                watch(compOpen, (v) => store.set('livemines_comp_open', v ? '1' : '0'));
                 watch(compView, (v) => store.set('livemines_comp_view', v));
 
                 // 把一份組成換成畫面用的百分比。分母是該視角的投注(含 EXBET 加購費),
@@ -3157,8 +3194,8 @@
                     { k: 'bonus', t: '二級玩法',   c: '#f472b6' },
                     { k: 'jp',    t: 'JP',        c: '#f87171' }
                 ];
-                const compOf = (stats) => {
-                    const c = stats && stats.comp && stats.comp[compView.value];
+                const compOf = (stats, view) => {
+                    const c = stats && stats.comp && stats.comp[view || compView.value];
                     if (!c || !(c.bet > 0)) return null;
                     const pct = (v) => v / c.bet * 100;
                     return {
@@ -3167,6 +3204,19 @@
                         parts: COMP_PARTS.map(x => ({ ...x, amount: c[x.k], pct: pct(c[x.k]) }))
                     };
                 };
+
+                // 並列模式的條長要能比較「總 RTP 的高低」, 所以三張卡九條共用同一個上限;
+                // 若各條都撐滿 100%, 就只看得出內部比例而看不出誰的 RTP 高。
+                const compMaxRtp = computed(() => {
+                    let m = 0;
+                    Object.values(clusterStats.value || {}).forEach(st => {
+                        COMP_SINGLE_VIEWS.forEach(v => {
+                            const c = compOf(st, v.k);
+                            if (c && c.rtp > m) m = c.rtp;
+                        });
+                    });
+                    return m || 100;
+                });
 
                 const computeClusters = () => {
                     const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0,
@@ -4416,7 +4466,8 @@
                     coverImage, coverFailed, showCover,
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
-                    compView, compOf, compViews: COMP_VIEWS, refundedBills,
+                    compView, compOpen, compOf, compViews: COMP_VIEWS, compSingleViews: COMP_SINGLE_VIEWS,
+                    compParts: COMP_PARTS, compMaxRtp, refundedBills,
                     playerStale, isRecomputing, recomputeNote,
                     showRtpTargetAll,
                     houseSections, houseOrderIsDefault, resetHouseOrder, houseDragIndex, houseDragOver,
