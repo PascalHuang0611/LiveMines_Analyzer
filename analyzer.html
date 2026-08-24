@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.50</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.51</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -310,6 +310,17 @@
             </div>
 
             <div class="basis-full">
+                <!-- 重算是同步的一整塊, 沒有提示的話看起來就是整頁當掉 -->
+                <div v-if="isRecomputing" class="text-[11px] text-indigo-300 mb-1 flex items-center gap-2">
+                    <svg class="animate-spin h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    <span>重新計算玩家資料（{{ activeRounds.length.toLocaleString() }} 筆單局）…</span>
+                </div>
+                <div v-else-if="playerStale" class="text-[11px] text-gray-500 mb-1">
+                    玩家分頁的數字尚未套用這個範圍，切過去時才重算（避免看大盤時白算一次）。
+                </div>
                 <div v-if="rangeRestored" class="text-[11px] text-sky-400 mb-1 flex items-center gap-2">
                     <span>已沿用你上次選的時間範圍</span>
                     <button @click="resetRange()"
@@ -363,8 +374,26 @@
         </div>
 
         <!-- Dashboard Content (Player Analytics) -->
-        <div v-if="!isProcessing && hasData && activeTab === 'player'" class="space-y-6 animate-fade-in-delayed">
-            
+        <div v-if="!isProcessing && hasData && activeTab === 'player'" class="space-y-6 animate-fade-in-delayed relative">
+
+            <!-- 重算期間蓋住底下的內容: 那十幾秒裡畫面上還是上一個範圍的數字,
+                 只在旁邊轉圈的話等於把過期數字當成結果給使用者看。
+                 轉圈用 transform 動畫(交給合成執行緒), 主執行緒被卡住時仍會動。 -->
+            <div v-if="isRecomputing"
+                class="absolute inset-0 z-30 rounded-2xl bg-[#0f172a]/80 backdrop-blur-sm flex flex-col items-center justify-start pt-24">
+                <svg class="animate-spin h-10 w-10 text-indigo-400 mb-3" viewBox="0 0 24 24" fill="none"
+                    style="will-change: transform">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <div class="text-lg font-bold text-white">重新計算中…</div>
+                <div class="text-sm text-gray-300 mt-1">
+                    此範圍 {{ activeRounds.length.toLocaleString() }} 筆玩家單局，重新分群與計算契合度
+                </div>
+                <div class="text-[11px] text-gray-500 mt-2">資料量大時需要數秒，畫面在這段時間不會回應</div>
+            </div>
+
             <!-- Controls -->
             <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
                 <div>
@@ -2626,6 +2655,12 @@
                     return p;
                 };
 
+                // 玩家側的重聚合很貴: 實測每筆玩家單局約 14μs, 95 萬筆要 13 秒
+                // (重跑 inRange、每位玩家重新排序與算契合度、重算分群、重畫圖表)。
+                // 而它的結果只有玩家分頁在看 —— 停在大盤分頁改範圍時照樣算, 是純浪費。
+                const playerStale = ref(false);   // 範圍變了但還沒重聚合
+                const isRecomputing = ref(false); // 正在重聚合(同步的一整塊, 期間畫面不會回應)
+
                 const rebuildFromRounds = () => {
                     const rounds = activeRounds.value;
                     const playerAgg = {};
@@ -2673,6 +2708,7 @@
                     }
 
                     computeClusters();
+                    playerStale.value = false;
                     nextTick(() => {
                         if (activeTab.value === 'player') renderChart();
                     });
@@ -2687,11 +2723,42 @@
                 // microtask 才跑, 那時 hasData 已經是 true —— 所以「把 restoreRange 放在 hasData 之前」
                 // 並不能省掉重算, 一定要明確擋掉, 否則同一次載入會全量重算兩遍。
                 let skipRangeRebuild = false;
+
+                // 玩家的數字現在有沒有在畫面上。彈窗是 fixed 且只綁 selectedPlayer,
+                // 所以它在大盤分頁也可能開著 —— 漏掉這個條件就會對著彈窗顯示過期數字。
+                const playerViewVisible = () => activeTab.value === 'player' || !!selectedPlayer.value;
+
+                // 重算是同步的一整塊, 開始之後主執行緒完全不回應, 所以提示必須「先真的畫出來」再開始算。
+                // 等兩個 rAF 是確認畫面 paint 過了; 分頁在背景時 rAF 不會觸發, 用 timeout 兜底
+                // (這個坑在匯出 PNG 時踩過一次)。
+                const afterPaint = () => new Promise(res => {
+                    let done = false;
+                    const finish = () => { if (!done) { done = true; res(); } };
+                    requestAnimationFrame(() => requestAnimationFrame(finish));
+                    setTimeout(finish, 120);
+                });
+                const rebuildWithProgress = async () => {
+                    if (isRecomputing.value) return;
+                    isRecomputing.value = true;
+                    await nextTick();
+                    await afterPaint();
+                    try { rebuildFromRounds(); }
+                    finally { isRecomputing.value = false; }
+                };
+
                 watch([rangeFrom, rangeTo], () => {
                     if (!hasData.value) return;
                     if (skipRangeRebuild) { skipRangeRebuild = false; return; }
+                    // 沒人在看玩家的數字就先不算, 只記下已過期, 切回去時再補。
+                    // 這是最大的一筆浪費: 看大盤時改一次範圍, 95 萬筆要白算 12 秒。
+                    if (!playerViewVisible()) { playerStale.value = true; return; }
                     clearTimeout(rangeRebuildTimer);
-                    rangeRebuildTimer = setTimeout(rebuildFromRounds, 200);
+                    rangeRebuildTimer = setTimeout(rebuildWithProgress, 200);
+                });
+
+                // 補算的唯一入口。用旗標而不是散在各處手動呼叫 —— 漏一處就會看到上一個範圍的數字。
+                watch([activeTab, selectedPlayer], () => {
+                    if (hasData.value && playerStale.value && playerViewVisible()) rebuildWithProgress();
                 });
 
                 const handleFileSelect = async (event) => {
@@ -4106,6 +4173,7 @@
                     coverImage, coverFailed, showCover,
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
+                    playerStale, isRecomputing,
                     showRtpTargetAll,
                     houseSections, houseOrderIsDefault, resetHouseOrder, houseDragIndex, houseDragOver,
                     startHouseDrag, endHouseDrag, dropHouseSection, moveHouseSection, alignMinRounds: ALIGN_MIN_ROUNDS,
