@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.52</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.53</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -356,6 +356,19 @@
             </div>
         </div>
 
+        <!-- 取消局退款注單提示 -->
+        <div v-if="!isProcessing && refundedBills > 0"
+            class="rounded-xl border border-sky-500/40 bg-sky-500/10 px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed">
+            <span class="text-sky-300 text-lg leading-none mt-0.5">↩</span>
+            <div class="text-sm">
+                <span class="text-sky-300 font-bold">已排除 {{ refundedBills.toLocaleString() }} 筆退款注單</span>
+                <span class="text-gray-400">
+                    —— 這些注單的 Bill Status 不是 Settled（取消的局會退款、玩家盈虧為 0）。
+                    算進來的話會被當成有投注、零派彩，把 RTP 往下稀釋。
+                </span>
+            </div>
+        </div>
+
         <!-- 匯出重複注單提示 -->
         <div v-if="!isProcessing && duplicateBills > 0"
             class="rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed">
@@ -432,6 +445,20 @@
                 </div>
             </div>
 
+            <!-- 組成視角: 篩的是「局」不是玩家 -->
+            <div class="flex flex-wrap items-center gap-2 -mb-2">
+                <span class="text-sm text-gray-400">RTP 組成</span>
+                <div class="flex rounded overflow-hidden border border-white/10">
+                    <button v-for="v in compViews" :key="v.k" @click="compView = v.k"
+                        class="px-3 py-1 text-xs transition-colors"
+                        :class="compView === v.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">{{ v.t }}</button>
+                </div>
+                <span class="text-[11px] text-gray-500">
+                    以「局」為單位切分：同一位玩家有些局買了 EXBET、有些沒買，會同時計入兩邊。
+                    分母含 EXBET 加購費，所以五項相加就是該視角的總 RTP。
+                </span>
+            </div>
+
             <!-- Segment Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家']" :key="seg"
@@ -466,6 +493,34 @@
                                 {{ clusterStats[seg]?.turnover > 0 ? (clusterStats[seg].payout / clusterStats[seg].turnover * 100).toFixed(2) : '0.00' }}%
                             </span>
                         </div>
+                        <!-- RTP 組成: 拆成一級/免費閃電/付費閃電/二級/JP -->
+                        <template v-if="compOf(clusterStats[seg])">
+                            <div class="pt-2 pb-1">
+                                <div class="flex justify-between text-[11px] text-gray-400 mb-1">
+                                    <span>組成（{{ compViews.find(v => v.k === compView).t }}）</span>
+                                    <span class="font-mono">{{ compOf(clusterStats[seg]).rtp.toFixed(2) }}%</span>
+                                </div>
+                                <div class="flex h-2 rounded overflow-hidden bg-slate-900">
+                                    <div v-for="x in compOf(clusterStats[seg]).parts" :key="x.k"
+                                        :style="{ width: Math.max(0, x.pct / compOf(clusterStats[seg]).rtp * 100) + '%', backgroundColor: x.c }"
+                                        :title="x.t + ' ' + x.pct.toFixed(2) + '%'"></div>
+                                </div>
+                                <div class="mt-1.5 space-y-0.5">
+                                    <div v-for="x in compOf(clusterStats[seg]).parts" :key="'r'+x.k"
+                                        class="flex items-center justify-between text-[11px]">
+                                        <span class="flex items-center gap-1.5 text-gray-400">
+                                            <span class="w-2 h-2 rounded-sm shrink-0" :style="{ backgroundColor: x.c }"></span>{{ x.t }}
+                                        </span>
+                                        <span class="font-mono" :class="x.pct > 0 ? 'text-gray-200' : 'text-gray-600'">{{ x.pct.toFixed(2) }}%</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] text-gray-600 mt-1">
+                                    此視角 {{ compOf(clusterStats[seg]).rounds.toLocaleString() }} 人次 · 投注 {{ formatMoney(compOf(clusterStats[seg]).bet) }}
+                                </div>
+                            </div>
+                        </template>
+                        <div v-else class="text-[11px] text-gray-600 py-2">此視角沒有資料</div>
+
                         <div class="flex justify-between text-sm cursor-help" :title="`定義: 該局贏分大於0\n分子 (Hit局數): ${clusterStats[seg]?.hitRounds?.toLocaleString() || 0}\n分母 (總參與人次): ${clusterStats[seg]?.rounds?.toLocaleString() || 0}`">
                             <span class="text-gray-400 border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">Hit Rate</span>
                             <span class="font-bold text-green-400">{{ clusterStats[seg]?.rounds > 0 ? (clusterStats[seg].hitRounds / clusterStats[seg].rounds * 100).toFixed(2) : '0.00' }}%</span>
@@ -1812,7 +1867,8 @@
                 const gameResultsData = ref([]);
                 const processedFiles = ref(0);
                 const totalRawRows = ref(0);
-                const duplicateBills = ref(0); // 匯出分頁邊界重複、已被略過的注單筆數
+                const duplicateBills = ref(0);
+                const refundedBills = ref(0);   // 取消局退款的注單, 不計入任何統計
                 const nicknameMap = ref({});   // key: Agent + Account -> 暱稱
                 const nicknameHits = ref(0);   // 有對到暱稱的玩家數
                 const billTimeSpan = ref(null); // { min, max } 注單檔涵蓋的時間
@@ -2632,6 +2688,14 @@
                 // 匯入時算一次, 之後每次改範圍再算一次 —— 所以聚合邏輯只能有這一份。
                 // 玩家統計的聚合器。全站重算與「只看某一天」共用同一份邏輯 ——
                 // 兩邊各寫一次的話, 遲早會有一邊改到、另一邊沒改。
+                // 一份組成: 分母(投注)與五個分子
+                const blankComp = () => ({ bet: 0, base: 0, free: 0, paid: 0, jp: 0, bonus: 0, payout: 0, rounds: 0 });
+                const addComp = (c, r) => {
+                    c.bet += r.bet; c.payout += r.payout; c.rounds += 1;
+                    c.base += r.wBase || 0; c.free += r.wFree || 0; c.paid += r.wPaid || 0;
+                    c.jp += r.wJp || 0; c.bonus += r.wBonus || 0;
+                };
+
                 const blankPlayerAgg = (account, agent) => ({
                     account, agent: agent || '',
                     placeCounts: Array(9).fill(0),
@@ -2639,6 +2703,9 @@
                     roundsCount: 0, totalHitRounds: 0, totalWinRounds: 0,
                     exbetRounds: 0, exbetBet: 0, exbetRoundBet: 0, exbetRoundPayout: 0,
                     plainRounds: 0, plainRoundBet: 0, plainRoundPayout: 0,
+                    // RTP 五項組成, 三種視角各記一份(全體 / 有買 EXBET 的局 / 沒買的局)。
+                    // 分開累積而不是事後從全體相減 —— 相減在浮點下會累積誤差, 也看不出哪一邊算錯。
+                    comp: { all: blankComp(), ex: blankComp(), plain: blankComp() },
                     rounds: [], gridsDist: {}, daily: {}
                 });
 
@@ -2652,7 +2719,12 @@
                     if (r.winLoss > 0) p.totalWinRounds++;
                     if (r.places) for (let i = 0; i < 9; i++) p.placeCounts[i] += r.places[i];
 
-                    if (r.exbetCount > 0) {
+                    // 有沒有買 EXBET: exbetCount 或 hasExtra 任一成立都算。
+                    // 舊匯出檔的 Bet Place 10 那一列可能被分頁 bug 弄丟(實測 9 組), 但 Extra Result
+                    // 複製在該玩家該局的每一列上, 掉一列不影響判斷 —— 少了這個 or, 那幾局會被歸進
+                    // 「沒買」卻帶著付費閃電的派彩, 讓一個結構上必為零的數字變成 0.03%。
+                    const boughtEx = r.exbetCount > 0 || r.hasExtra;
+                    if (boughtEx) {
                         p.exbetRounds++;
                         p.exbetBet += r.exbetBet;
                         p.exbetRoundBet += r.bet;
@@ -2662,6 +2734,8 @@
                         p.plainRoundBet += r.bet;
                         p.plainRoundPayout += r.payout;
                     }
+                    addComp(p.comp.all, r);
+                    addComp(boughtEx ? p.comp.ex : p.comp.plain, r);
                     p.rounds.push(r);
 
                     // 逐日的投注與餘額改由 buildDaily 在 finalize 時算 —— 它是唯一受換日點影響的東西,
@@ -2878,6 +2952,7 @@
                     // 否則那幾局的流水與派彩會被算兩遍。
                     const seenBillNos = new Set();
                     duplicateBills.value = 0;
+                    refundedBills.value = 0;
 
                     // 兩個 CSV 是分別撈的, 時間範圍常常對不齊。這裡只記錄各自的頭尾, 載入完再比對。
                     const billSpan = { min: null, max: null };
@@ -2906,6 +2981,15 @@
                                             const account = row['Account'];
                                             const gameCode = row['Game Code'];
                                             if(!account || !gameCode) return;
+
+                                            // 取消的局會退款: Bill Status 是 RefundSuccess、Member Win/Loss 為 0。
+                                            // 不排掉的話那些投注會被算成流水、派彩 0, 把 RTP 往下稀釋,
+                                            // 玩家盈虧也會跟實際不符(錢其實退回去了)。
+                                            const billStatus = row['Bill Status'];
+                                            if (billStatus && billStatus !== 'Settled') {
+                                                refundedBills.value++;
+                                                return;
+                                            }
 
                                             const billNo = row['Bill No'];
                                             if (billNo) {
@@ -2942,14 +3026,31 @@
                                                 exbetCount: 0,
                                                 exbetBet: 0,
                                                 exbetPayout: 0,
-                                                exbetWinLoss: 0
+                                                exbetWinLoss: 0,
+                                                // RTP 五項組成
+                                                wBase: 0, wFree: 0, wPaid: 0, wJp: 0, wBonus: 0,
+                                                hasExtra: false      // 這局有購買閃電的落點紀錄
                                             };
                                         }
                                         
                                         if (betPlace >= 1 && betPlace <= 9) {
                                             groupedRounds[roundKey].grids += 1;
                                             groupedRounds[roundKey].places[betPlace - 1] += 1;
+
+                                            // 逐格拆出這一列派彩的組成
+                                            const cell = String(betPlace);
+                                            const hits = parseCells(row['Game Result']).filter(x => x === cell).length;
+                                            const base = bet * (BASE_PAYOUTS[hits] || 0);
+                                            const free = base * (parseCells(row['FreeLightning']).includes(cell) ? 1 : 0);
+                                            const extra = parseExtra(row['Extra Result']);
+                                            const paid = base * (extra[cell] || 0);
+                                            const jp = parseFloat(row['JP Win']) || 0;
+                                            const g = groupedRounds[roundKey];
+                                            g.wBase += base; g.wFree += free; g.wPaid += paid; g.wJp += jp;
+                                            g.wBonus += payout - (base + free + paid + jp);
+                                            if (Object.keys(extra).length) g.hasExtra = true;
                                         } else if (betPlace === 10) {
+                                            if (row['Extra Result']) groupedRounds[roundKey].hasExtra = true;
                                             groupedRounds[roundKey].exbetCount += 1;
                                             groupedRounds[roundKey].exbetBet += bet;
                                             groupedRounds[roundKey].exbetPayout += payout;
@@ -3037,8 +3138,39 @@
                     isProcessing.value = false;
                 };
 
+                // 分群面板看哪一種局: 全體 / 有買 EXBET / 沒買。
+                // 這不是篩選玩家, 是篩選「局」—— 同一個玩家有些局買有些局沒買, 兩邊都會算到他。
+                const COMP_VIEWS = [
+                    { k: 'all', t: '全體' },
+                    { k: 'ex', t: '有 EX' },
+                    { k: 'plain', t: '沒 EX' }
+                ];
+                const compView = ref(store.get('livemines_comp_view') || 'all');
+                watch(compView, (v) => store.set('livemines_comp_view', v));
+
+                // 把一份組成換成畫面用的百分比。分母是該視角的投注(含 EXBET 加購費),
+                // 所以五項加起來就是該視角的總 RTP。
+                const COMP_PARTS = [
+                    { k: 'base',  t: '一級玩法',   c: '#818cf8' },
+                    { k: 'free',  t: '免費閃電',   c: '#fbbf24' },
+                    { k: 'paid',  t: '付費閃電',   c: '#34d399' },
+                    { k: 'bonus', t: '二級玩法',   c: '#f472b6' },
+                    { k: 'jp',    t: 'JP',        c: '#f87171' }
+                ];
+                const compOf = (stats) => {
+                    const c = stats && stats.comp && stats.comp[compView.value];
+                    if (!c || !(c.bet > 0)) return null;
+                    const pct = (v) => v / c.bet * 100;
+                    return {
+                        bet: c.bet, payout: c.payout, rounds: c.rounds,
+                        rtp: pct(c.payout),
+                        parts: COMP_PARTS.map(x => ({ ...x, amount: c[x.k], pct: pct(c[x.k]) }))
+                    };
+                };
+
                 const computeClusters = () => {
-                    const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0 });
+                    const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0,
+                        comp: { all: blankComp(), ex: blankComp(), plain: blankComp() } });
                     const clusters = {
                         '高價值玩家': initStats(),
                         '中階玩家': initStats(),
@@ -3065,6 +3197,12 @@
                         clusters[segment].winRounds += p.totalWinRounds;
                         clusters[segment].exbetRounds += p.exbetRounds;
                         if (p.exbetRounds > 0) clusters[segment].exbetPlayers += 1;
+                        ['all', 'ex', 'plain'].forEach(k => {
+                            const src = p.comp[k], dst = clusters[segment].comp[k];
+                            dst.bet += src.bet; dst.payout += src.payout; dst.rounds += src.rounds;
+                            dst.base += src.base; dst.free += src.free; dst.paid += src.paid;
+                            dst.jp += src.jp; dst.bonus += src.bonus;
+                        });
                     });
                     
                     clusterStats.value = clusters;
@@ -3337,6 +3475,28 @@
 
                 // 「要剔掉幾局才回到目標 RTP」用的門檻。設計值變了就改這裡。
                 const RTP_TARGET = 97;
+
+                // ===== RTP 組成拆解 =====
+                // 規則出處: 理論/LiveMines_Simulator.cpp 的逐格歸屬, 與 TG001_LM01_BASE_Config.json。
+                //   一級(基礎)   = 投注 × singleAreaBasePayouts[該格命中球數]
+                //   免費閃電     = 一級 × 該格的 FreeLightning 倍率(設定檔裡固定為 1)
+                //   付費閃電     = 一級 × 該格在 Extra Result 裡的倍率
+                //   JP           = JP Win 欄, 獨立一項(只有二級闖關全過才可能中)
+                //   二級(三同球) = 派彩扣掉上面四項的殘差
+                // 二級用殘差而不是自己算闖關結果, 是因為 BGLevel 只記過程不記金額;
+                // 但它可驗證: 實測 180 萬列注單裡, 殘差 100% 落在 bonusGame.payouts 的
+                // {0,15,40,100,250,500} 上, 而非二級注單的殘差恰好為 0 —— 那才是這套歸屬正確的證據。
+                const BASE_PAYOUTS = { 1: 2, 2: 5, 3: 10 };
+                const parseCells = (raw) => String(raw || '').match(/\d+/g) || [];
+                // "(3,2),(4,3)" -> { '3': 2, '4': 3 }
+                const parseExtra = (raw) => {
+                    const out = {};
+                    String(raw || '').replace(/\((\d+),\s*([\d.]+)\)/g, (_, cell, mult) => {
+                        out[cell] = parseFloat(mult) || 0;
+                        return '';
+                    });
+                    return out;
+                };
 
                 // 使用者確認過「這局沒問題」的局號, 存在自己的瀏覽器裡。
                 // 目的是讓待查清單只留下還沒看過的, 不是把資料刪掉 —— 所以要能還原。
@@ -4256,6 +4416,7 @@
                     coverImage, coverFailed, showCover,
                     houseStats, fmtInt, fmtHours,
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
+                    compView, compOf, compViews: COMP_VIEWS, refundedBills,
                     playerStale, isRecomputing, recomputeNote,
                     showRtpTargetAll,
                     houseSections, houseOrderIsDefault, resetHouseOrder, houseDragIndex, houseDragOver,

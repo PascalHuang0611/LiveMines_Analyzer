@@ -11,3 +11,11 @@ nicknames.json
 # 只有 cover*.png 是刻意要隨程式發布的封面圖，需確認不含可辨識的真人。
 *.png
 !cover*.png
+
+# 遊戲數學：模擬器原始碼、設定檔（完整賠率表、RTP 目標、風控參數）、模擬報告。
+# 本 repo 是公開的 —— 這些一旦外流，任何人都能反推這個上線中遊戲的經濟結構。
+# analyzer 只在程式碼註解裡引用推導出來的規則，不需要這些檔案就能跑。
+理論/
+*_Config.json
+*_Config_Report.txt
+LiveMines_Simulator*
