@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.55</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.56</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -445,18 +445,23 @@
                 </div>
             </div>
 
-            <!-- 組成視角: 篩的是「局」不是玩家。收起時整排不出現, 面板才不會一眼太多字 -->
-            <div v-if="compOpen" class="flex flex-wrap items-center gap-2 -mb-2">
-                <span class="text-sm text-gray-400">RTP 組成</span>
+            <!-- 組成視角。這一排永遠顯示: 原本只在展開時出現, 會把下面整排卡片往下推,
+                 而觸發展開的點擊區就在卡片裡 —— 點下去目標自己跑掉。長說明搬進 tooltip,
+                 所以常駐的高度比原本展開時還小。 -->
+            <div class="flex flex-wrap items-center gap-2 -mb-2">
+                <span class="text-sm text-gray-400 border-b border-dashed border-gray-600 pb-0.5 cursor-help"
+                    title="以「局」為單位切分：同一位玩家有些局買了 EXBET、有些沒買，會同時計入兩邊。&#10;分母含 EXBET 加購費，所以五項相加就是該視角的總 RTP。&#10;「三種並列」會在每張卡同時畫三條，條長共用全域上限，所以長度代表總 RTP、分段代表組成。">
+                    RTP 組成
+                </span>
                 <div class="flex rounded overflow-hidden border border-white/10">
-                    <button v-for="v in compViews" :key="v.k" @click="compView = v.k"
+                    <button v-for="v in compViews" :key="v.k" @click="compView = v.k; compOpen = true"
                         class="px-3 py-1 text-xs transition-colors"
                         :class="compView === v.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'">{{ v.t }}</button>
                 </div>
-                <span class="text-[11px] text-gray-500">
-                    以「局」為單位切分：同一位玩家有些局買了 EXBET、有些沒買，會同時計入兩邊。
-                    分母含 EXBET 加購費，所以五項相加就是該視角的總 RTP。
-                </span>
+                <button @click="compOpen = !compOpen"
+                    class="text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+                    {{ compOpen ? '收起' : '展開' }}
+                </button>
             </div>
 
             <!-- Segment Cards -->
