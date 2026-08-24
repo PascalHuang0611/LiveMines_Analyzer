@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.54</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.55</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -461,11 +461,11 @@
 
             <!-- Segment Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- 卡片本身不再是篩選開關: 它裡面已經有「展開組成」的點擊區, 兩件事綁在同一塊會誤觸。
+                     篩選改由下方排行榜自己的按鈕負責。 -->
                 <div v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家']" :key="seg"
-                    @click="segmentFilter = (segmentFilter === seg ? null : seg)"
-                    class="glass rounded-2xl p-6 relative overflow-hidden cursor-pointer transition-all"
-                    :class="segmentFilter === seg ? 'ring-2 ring-indigo-400 bg-indigo-500/10' : 'hover:ring-1 hover:ring-white/20'"
-                    :title="segmentFilter === seg ? '再點一次取消篩選' : '點擊只看這一群玩家'">
+                    class="glass rounded-2xl p-6 relative overflow-hidden transition-all"
+                    :class="segmentFilter === seg ? 'ring-2 ring-indigo-400/60' : ''">
                     <div
                         class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-bl-full -z-10">
                     </div>
@@ -475,7 +475,8 @@
                     </h3>
                     <div class="text-3xl font-extrabold mb-1">{{ clusterStats[seg]?.count.toLocaleString() || 0 }} <span
                             class="text-sm font-normal text-gray-400">人</span>
-                        <span v-if="segmentFilter === seg" class="text-[10px] font-normal text-indigo-300 border border-indigo-400/50 rounded px-1.5 py-0.5 ml-2 align-middle">篩選中</span>
+                        <span v-if="segmentFilter === seg" class="text-[10px] font-normal text-indigo-300 border border-indigo-400/50 rounded px-1.5 py-0.5 ml-2 align-middle"
+                            title="下方排行榜目前只列這一群">排行榜篩選中</span>
                     </div>
                     <div class="text-sm text-gray-400 mb-1">平均單局下注額: <span class="text-white font-bold">
                         {{ clusterStats[seg]?.rounds > 0 ? formatMoney(clusterStats[seg].turnover / clusterStats[seg].rounds) : '0.00' }}
@@ -666,9 +667,20 @@
             <div class="glass rounded-2xl p-6 mb-6">
                 <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-3 flex-wrap">
                     全站玩家排行
-                    <span v-if="segmentFilter" class="text-sm px-2 py-1 rounded bg-indigo-600/30 text-indigo-200 font-normal border border-indigo-400/40 flex items-center gap-2">
-                        只看 {{ segmentFilter }}
-                        <button @click="segmentFilter = null" class="text-indigo-300 hover:text-white leading-none" title="顯示全部分群">✕</button>
+                    <!-- 分群篩選: 排行榜自己的按鈕, 不再靠點上面的卡片 -->
+                    <span class="flex items-center gap-1 font-normal">
+                        <button @click="segmentFilter = null"
+                            class="px-2.5 py-1 rounded text-xs transition-colors border"
+                            :class="!segmentFilter ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
+                            全部分群
+                        </button>
+                        <button v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家']" :key="'f'+seg"
+                            @click="segmentFilter = (segmentFilter === seg ? null : seg)"
+                            class="px-2.5 py-1 rounded text-xs transition-colors border"
+                            :class="segmentFilter === seg ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'"
+                            :title="`只列 ${seg}（${clusterStats[seg]?.count?.toLocaleString() || 0} 人）`">
+                            {{ seg.replace('玩家', '') }}
+                        </button>
                     </span>
                     <button @click="exportPlayerList" :disabled="!filteredPlayers.length"
                         class="ml-auto px-3 py-1.5 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30 disabled:opacity-40"
