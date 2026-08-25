@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.66</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.67</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -500,6 +500,14 @@
                         <span v-if="segmentFilter === seg" class="text-[10px] font-normal text-indigo-300 border border-indigo-400/50 rounded px-1.5 py-0.5 ml-2 align-middle"
                             title="下方排行榜目前只列這一群">排行榜篩選中</span>
                     </div>
+                    <!-- 每人玩幾局。刻意不跟著上面那排視角走: 分母是「人數」, 而人數沒有分視角的版本 ——
+                         同一位玩家有些局買 EXBET、有些沒買, 會同時屬於兩邊, 切到「有 EX」時分母仍是全部人,
+                         算出來會是個沒有意義的混血數字。下面兩行的分母是局數, 同理也維持全體。 -->
+                    <div class="text-sm text-gray-400 mb-1 cursor-help"
+                        :title="`同一位玩家在同一局押多格只算一局 —— 一局就是一次 (局, 玩家), 與押幾格無關。\n分子 (總參與人次): ${clusterStats[seg]?.rounds?.toLocaleString() || 0}\n分母 (人數): ${clusterStats[seg]?.count?.toLocaleString() || 0}`">
+                        <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">平均押注次數</span>: <span class="text-white font-bold">
+                        {{ clusterStats[seg]?.count > 0 ? (clusterStats[seg].rounds / clusterStats[seg].count).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0.0' }} 局
+                    </span></div>
                     <div class="text-sm text-gray-400 mb-1">平均單局下注額: <span class="text-white font-bold">
                         {{ clusterStats[seg]?.rounds > 0 ? formatMoney(clusterStats[seg].turnover / clusterStats[seg].rounds) : '0.00' }}
                     </span></div>

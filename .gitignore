@@ -7,6 +7,11 @@ Old_Backup/
 # 工具改從選取的資料夾直接讀這個檔，不需要上傳到任何地方。
 nicknames.json
 
+# 平台匯出的報表。實測 query_*.xlsx 內含明文 login_name 與 customer_id，
+# 跟 nicknames.json 是同一類東西（可還原到真實玩家），一樣不能進公開 repo。
+*.xlsx
+*.xls
+
 # 圖片預設不提交（避免誤傳截圖、含真人照片的素材）。
 # 只有 cover*.png 是刻意要隨程式發布的封面圖，需確認不含可辨識的真人。
 *.png
