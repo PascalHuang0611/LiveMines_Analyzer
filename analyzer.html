@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.70</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.71</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -357,7 +357,7 @@
         </div>
 
         <!-- 取消局退款注單提示 -->
-        <div v-if="!isProcessing && refundedBills > 0"
+        <div v-if="!isProcessing && refundedBills > 0 && !dismissedNotices.refund"
             class="rounded-xl border border-sky-500/40 bg-sky-500/10 px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed">
             <span class="text-sky-300 text-lg leading-none mt-0.5">↩</span>
             <div class="text-sm">
@@ -367,10 +367,12 @@
                     算進來的話會被當成有投注、零派彩，把 RTP 往下稀釋。
                 </span>
             </div>
+            <button @click="dismissNotice('refund')" title="關閉這則提示（重新匯入時會再出現）"
+                class="ml-auto shrink-0 text-gray-500 hover:text-white hover:bg-white/10 rounded w-6 h-6 flex items-center justify-center transition-colors leading-none">✕</button>
         </div>
 
         <!-- 匯出重複注單提示 -->
-        <div v-if="!isProcessing && duplicateBills > 0"
+        <div v-if="!isProcessing && duplicateBills > 0 && !dismissedNotices.duplicate"
             class="rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed">
             <span class="text-amber-400 text-lg leading-none mt-0.5">⚠</span>
             <div class="text-sm">
@@ -382,10 +384,12 @@
                     若需要完整資料，建議重新匯出一份再比對。
                 </div>
             </div>
+            <button @click="dismissNotice('duplicate')" title="關閉這則提示（重新匯入時會再出現）"
+                class="ml-auto shrink-0 text-gray-500 hover:text-white hover:bg-white/10 rounded w-6 h-6 flex items-center justify-center transition-colors leading-none">✕</button>
         </div>
 
         <!-- 兩檔時間範圍不一致提示 -->
-        <div v-if="!isProcessing && timeSpanWarning" class="rounded-xl border px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed"
+        <div v-if="!isProcessing && timeSpanWarning && !dismissedNotices.timeSpan" class="rounded-xl border px-5 py-3 mb-6 flex items-start gap-3 animate-fade-in-delayed"
             :class="timeSpanWarning.severe ? 'border-amber-500/40 bg-amber-500/10' : 'border-sky-500/40 bg-sky-500/10'">
             <span class="text-lg leading-none mt-0.5" :class="timeSpanWarning.severe ? 'text-amber-400' : 'text-sky-400'">
                 {{ timeSpanWarning.severe ? '⚠' : 'ⓘ' }}
@@ -399,6 +403,8 @@
                     大盤 {{ timeSpanWarning.game.min }} ~ {{ timeSpanWarning.game.max }}
                 </div>
             </div>
+            <button @click="dismissNotice('timeSpan')" title="關閉這則提示（重新匯入時會再出現）"
+                class="ml-auto shrink-0 text-gray-500 hover:text-white hover:bg-white/10 rounded w-6 h-6 flex items-center justify-center transition-colors leading-none">✕</button>
         </div>
 
         <!-- Dashboard Content (Player Analytics) -->
@@ -806,18 +812,18 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                         <span v-if="isPartialDay(d)"
                                             class="text-[9px] text-amber-300 border border-amber-400/40 rounded px-1 ml-1">部分</span>
                                     </th>
+                                    <!-- 原本這裡是「初始餘額 / 結束餘額」兩欄。餘額本身在點開玩家後的
+                                         每日卡片上看得到, 排行榜這裡要的是「這天賺賠多少」, 所以換成盈虧一欄,
+                                         橫向也少一欄好捲。 -->
                                     <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]"
-                                        :title="isPartialDay(d) ? '此範圍內該日第一筆的餘額（' + dayWindowOf(d) + '），不是當日開盤' : ''">
-                                        {{ isPartialDay(d) ? '區間初始' : '初始餘額' }}</th>
-                                    <th class="px-4 py-3 text-right whitespace-nowrap text-[11px] font-normal text-gray-400 min-w-[110px]"
-                                        :title="isPartialDay(d) ? '此範圍內該日最後一筆的餘額（' + dayWindowOf(d) + '），不是當日收盤' : ''">
-                                        {{ isPartialDay(d) ? '區間結束' : '結束餘額' }}</th>
+                                        :title="'當日盈虧 = 該日所有注單的 Member Win/Loss 加總（含 EXBET 加購費）。\n不是「結束餘額 − 初始餘額」—— 餘額差含存提款，那不是盈虧。\n初始／結束餘額請點開玩家看每日卡片。' + (isPartialDay(d) ? '\n這一天只涵蓋 ' + dayWindowOf(d) : '')">
+                                        當日盈虧</th>
                                 </template>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="!filteredPlayers.length">
-                                <td :colspan="7 + rangeDays.length * 3" class="p-8 text-center text-gray-500">
+                                <td :colspan="7 + rangeDays.length * 2" class="p-8 text-center text-gray-500">
                                     <!-- 精確時間篩選之後「空範圍」變得隨手可得, 不分開講會渲染成
                                          「找不到帳號包含「」的玩家」—— 引號裡什麼都沒有 -->
                                     <template v-if="playerSearch.trim()">
@@ -877,16 +883,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                         <span v-if="player.daily[d]" class="text-gray-300">{{ formatMoney(player.daily[d].bet) }}</span>
                                         <span v-else class="text-gray-700">—</span>
                                     </td>
-                                    <td class="px-4 py-3 text-right whitespace-nowrap text-gray-400">
-                                        <span v-if="player.daily[d] && player.daily[d].open !== null">{{ formatMoney(player.daily[d].open) }}</span>
-                                        <span v-else class="text-gray-700">—</span>
-                                    </td>
                                     <td class="px-4 py-3 text-right whitespace-nowrap">
-                                        <template v-if="player.daily[d] && player.daily[d].close !== null">
-                                            <span :class="player.daily[d].close >= player.daily[d].open ? 'text-green-400' : 'text-red-400'">
-                                                {{ formatMoney(player.daily[d].close) }}
-                                            </span>
-                                        </template>
+                                        <span v-if="player.daily[d]" class="font-bold"
+                                            :class="player.daily[d].winLoss >= 0 ? 'text-green-400' : 'text-red-400'">
+                                            {{ formatMoney(player.daily[d].winLoss) }}
+                                        </span>
                                         <span v-else class="text-gray-700">—</span>
                                     </td>
                                 </template>
@@ -2233,6 +2234,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 let billRoundArr = null, billCellArr = null, billBetArr = null, billPayoutArr = null;
                 let billBaseArr = null, billFreeArr = null, billPaidArr = null, billJpArr = null;
                 let roundSeq = 0, dataGen = 0;   // dataGen: 重新匯入時讓逐格快取失效
+                // 提示橫幅按了 ✕ 就不再出現 —— 它已經起到告知作用了。
+                // 但「重新匯入」一定要讓它們回來: 新的檔案可能有不同的問題(或同樣的問題但不同數量),
+                // 沿用上一份的關閉狀態等於把新問題靜音。所以這是一個每次匯入就清空的 ref,
+                // 刻意不存進 localStorage。
+                const dismissedNotices = ref({});
+                const dismissNotice = (k) => { dismissedNotices.value = { ...dismissedNotices.value, [k]: true }; };
 
                 const allRounds = ref([]);     // 全部玩家單局, 篩選時間範圍後重新聚合就靠它
 
@@ -3140,8 +3147,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const day = dayKeyOf(r.wallTime);
                         if (!day) return;
                         let d = daily[day];
-                        if (!d) d = daily[day] = { bet: 0, rounds: 0, firstWall: '', lastWall: '', open: null, close: null };
+                        if (!d) d = daily[day] = { bet: 0, winLoss: 0, rounds: 0, firstWall: '', lastWall: '', open: null, close: null };
                         d.bet += r.bet;
+                        // 當日盈虧用 Member Win/Loss 累加, 不是「結束餘額 - 初始餘額」——
+                        // 餘額差含存提款, 那不是盈虧。r.winLoss 是無條件累加的(含 Bet Place 10
+                        // 那列的 EXBET 加購費), 所以它就是這一天的實際淨輸贏。
+                        d.winLoss += r.winLoss;
                         d.rounds += 1;
                         if (!d.firstWall || r.wallTime < d.firstWall) { d.firstWall = r.wallTime; d.open = r.balance; }
                         if (!d.lastWall || r.wallTime > d.lastWall) { d.lastWall = r.wallTime; d.close = r.balance; }
@@ -3332,6 +3343,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     // 否則那幾局的流水與派彩會被算兩遍。
                     const seenBillNos = new Set();
                     dataGen++;
+                    dismissedNotices.value = {};   // 新檔案的問題要重新提醒一次
                     duplicateBills.value = 0;
                     refundedBills.value = 0;
                     // 逐格金額不放在 round 物件上, 而是另存一組「一列注單一筆」的平行陣列。
@@ -5782,6 +5794,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     startHouseDrag, endHouseDrag, dropHouseSection, moveHouseSection, alignMinRounds: ALIGN_MIN_ROUNDS,
                     ballGranMode, ballGranSize, ballGranOptions: BALL_GRAN_OPTIONS, divergingCell, exportBallHeatmapPng, showHeatmapModal,
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
+                    dismissedNotices, dismissNotice,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16,
                     shiftWindow, canShift, snapToWholeDays,
