@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.75</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.76</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -742,9 +742,14 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             <button @click="hotzoneMode = 'ball'" 
                                 :class="hotzoneMode === 'ball' ? 'bg-cyan-600 text-white' : 'bg-gray-800 text-gray-400'"
                                 class="px-3 py-1 rounded-md text-xs font-bold transition-colors">落球</button>
-                            <button @click="hotzoneMode = 'lightning'"
-                                :class="hotzoneMode === 'lightning' ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400'"
-                                class="px-3 py-1 rounded-md text-xs font-bold transition-colors">閃電</button>
+                            <button @click="hotzoneMode = 'free'"
+                                :class="hotzoneMode === 'free' ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400'"
+                                title="每局固定開出的免費閃電位置（每局 2~3 格）"
+                                class="px-3 py-1 rounded-md text-xs font-bold transition-colors">免費閃電</button>
+                            <button @click="hotzoneMode = 'paid'"
+                                :class="hotzoneMode === 'paid' ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'"
+                                title="EXBET 加購買到的額外閃電位置（每局固定 3 格）。每一局都會開，與有沒有人購買無關，所以分母跟另外兩個一樣是全部局數。"
+                                class="px-3 py-1 rounded-md text-xs font-bold transition-colors">付費閃電</button>
                         </div>
                     </div>
                     
@@ -1736,7 +1741,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         <h3 class="text-xl font-bold text-white mb-1">營收表現</h3>
                         <p class="text-sm text-gray-400 mb-5">
                             {{ houseStats.rounds.toLocaleString() }} 局有效局，涵蓋 {{ houseStats.spanHours.toFixed(1) }} 小時
-                            <span v-if="houseStats.emptyRounds" class="text-gray-500">（另有 {{ houseStats.emptyRounds }} 局無人下注、{{ houseStats.pending }} 局未結算，未列入計算）</span>
+                            <span v-if="houseStats.emptyRounds" class="text-gray-500">（另有 {{ houseStats.emptyRounds }} 局投注額為 0<span v-if="houseStats.zeroBetRounds" class="text-gray-600">（其中 {{ houseStats.zeroBetRounds }} 局房內有人卻沒人下注）</span>、{{ houseStats.pending }} 局非 Approved（進行中或已取消），未列入計算）</span>
                         </p>
 
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -1755,7 +1760,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 </div>
                             </div>
                             <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5 cursor-help"
-                                :title="`RTP = 總派彩 / 總投注\nhold = 平台實際留成比例`">
+                                :title="`RTP = 總派彩 / 總投注\nhold = 平台實際留成比例\n分母是 game_results 的 Bet Amount —— 實測與注單側的 Turnover 合計相符(比值 1.0003), 代表它含 EXBET 加購費, 與玩家分頁的群體 RTP 同口徑`">
                                 <div class="text-xs text-gray-500 mb-1">RTP ／ hold</div>
                                 <div class="text-2xl font-bold text-yellow-400">{{ houseStats.rtp.toFixed(2) }}%</div>
                                 <div class="text-xs text-gray-400">留成 {{ houseStats.hold.toFixed(2) }}%</div>
@@ -1971,8 +1976,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             <p class="text-[11px] text-gray-500 mt-3 leading-relaxed">
                                 「三球皆不同」「雙同球」「三同球」是三個互斥類別、合計必為 100%，所以三者的偏差相加恆為 0。
                                 前兩者的偏差幾乎互為鏡像（差額就是三同球的偏差），要當成同一個偏離看，不是兩個獨立證據。
-                                以目前 {{ houseStats.ballPattern.rounds.toLocaleString() }} 局計，單一比例的標準誤約
-                                {{ (Math.sqrt(0.25 / houseStats.ballPattern.rounds) * 100).toFixed(2) }}pp。
+                                以目前 {{ houseStats.ballPattern.rounds.toLocaleString() }} 局計，各類別的標準誤不同（依自己的設計值而定）：
+                                三球皆不同 ±{{ houseStats.ballPattern.distinct.sd.toFixed(2) }}、
+                                雙同球 ±{{ houseStats.ballPattern.pair.sd.toFixed(2) }}、
+                                三同球 ±{{ houseStats.ballPattern.triple.sd.toFixed(2) }} pp。
+                                上面每一列的「約 N 個標準誤」已各自用對應的標準誤算出，不要套用同一個數字去換算。
                             </p>
                         </div>
 
@@ -2267,8 +2275,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
 
                 const gridsBetDist = ref({}); // { 1: count, 2: count ... }
                 const ballCounts = ref(Array(9).fill(0));
-                const lightningCounts = ref(Array(9).fill(0));
-                const hotzoneMode = ref('ball'); // 'ball' or 'lightning'
+                const lightningCounts = ref(Array(9).fill(0));      // 免費閃電
+                const paidLightningCounts = ref(Array(9).fill(0));  // 付費閃電(EXBET 買到的那幾格)
+                const hotzoneMode = ref('ball'); // 'ball' | 'free' | 'paid'
 
                 const playersMap = ref({});
                 const physicalGames = ref({}); // gameCode -> { rawRes, rawLight }, 給押注/開獎對照用
@@ -3263,6 +3272,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const seenGames = new Set();
                     const balls = Array(9).fill(0);
                     const lights = Array(9).fill(0);
+                    const paidLights = Array(9).fill(0);
 
                     rounds.forEach(r => {
                         let p = playerAgg[r.account];
@@ -3283,6 +3293,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 String(u.rawLight).split(',').forEach(x => {
                                     const n = parseInt(x); if (n >= 1 && n <= 9) lights[n - 1]++;
                                 });
+                                // 用 parseExtra 而不是 parseCells: Extra Result 是 "(3,2),(8,2)" 這種
+                                // (格位, 倍率) 對, parseCells 只抓數字會把倍率也當成格位算進去。
+                                Object.keys(parseExtra(u.rawExtra)).forEach(k => {
+                                    const n = parseInt(k); if (n >= 1 && n <= 9) paidLights[n - 1]++;
+                                });
                             }
                         }
                     });
@@ -3294,6 +3309,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     gridsBetDist.value = dist;
                     ballCounts.value = balls;
                     lightningCounts.value = lights;
+                    paidLightningCounts.value = paidLights;
                     playersMap.value = playerAgg;
                     totalPlayerRounds.value = rounds.length;
 
@@ -3573,12 +3589,22 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                         }
                                         
                                         // 2. Unique Physical Games (for hot/cold)
-                                        if(!uniquePhysicalGames[gameCode]) {
-                                            uniquePhysicalGames[gameCode] = {
+                                        let ug = uniquePhysicalGames[gameCode];
+                                        if (!ug) {
+                                            ug = uniquePhysicalGames[gameCode] = {
                                                 rawRes: row['Game Result'] || '',
-                                                rawLight: row['FreeLightning'] || ''
+                                                rawLight: row['FreeLightning'] || '',
+                                                rawExtra: ''
                                             };
                                         }
+                                        // 付費閃電(Extra Result)只出現在有買 EXBET 的玩家那幾列, 而這一局的
+                                        // 第一列未必是買家 —— 所以不能跟上面兩個一樣只讀第一列, 要等到看見
+                                        // 非空值再補。
+                                        // 它確實是「每局固定」的物理屬性: 實測同一局所有買家看到的是同一組
+                                        // (只有字串順序不同, 用集合比對 0 個不一致), 而且與 game_results 的
+                                        // Extra Result 完全相符。每一局都有、固定 3 格 —— 分母跟落球/免費閃電
+                                        // 一樣是全部局數, 所以三者可以放在同一張冷熱區互相比較。
+                                        if (!ug.rawExtra && row['Extra Result']) ug.rawExtra = row['Extra Result'];
 
                                     });
                                     }
@@ -4821,25 +4847,24 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     if (tab === 'house' && gameReady) nextTick(renderHouseCharts);
                 });
 
-                const getHeatCount = (index) => {
-                    return hotzoneMode.value === 'ball' ? ballCounts.value[index-1] : lightningCounts.value[index-1];
-                };
+                // 三種模式共用同一個來源選擇。原本四個地方各寫一次「ball ? A : B」的三元運算,
+                // 加第三種模式時漏掉任何一處, 那一處就會靜默沿用免費閃電的數字。
+                const HOTZONE_SRC = { ball: ballCounts, free: lightningCounts, paid: paidLightningCounts };
+                const heatCounts = () => (HOTZONE_SRC[hotzoneMode.value] || ballCounts).value;
+                const getHeatCount = (index) => heatCounts()[index - 1];
 
                 // 顏色走跟大盤落球熱力圖同一支 divergingCell —— 紅=偏高、白=接近期望、藍=偏低,
                 // 兩處的顏色語言一致才不用重新學。deff 傳 1: 這裡只要顏色規則相同,
                 // 不套大盤那邊的 design effect 校正(那是為了卡方顯著性, 屬於統計而非配色)。
-                const heatTotal = computed(() => {
-                    const counts = hotzoneMode.value === 'ball' ? ballCounts.value : lightningCounts.value;
-                    return counts.reduce((a, b) => a + b, 0);
-                });
+                const heatTotal = computed(() => heatCounts().reduce((a, b) => a + b, 0));
                 const heatCellOf = (index) => {
-                    const counts = hotzoneMode.value === 'ball' ? ballCounts.value : lightningCounts.value;
+                    const counts = heatCounts();
                     const total = counts.reduce((a, b) => a + b, 0);
                     return divergingCell(counts[index - 1], total, 1);
                 };
 
                 const chiSquareTest = computed(() => {
-                    const counts = hotzoneMode.value === 'ball' ? ballCounts.value : lightningCounts.value;
+                    const counts = heatCounts();
                     const total = counts.reduce((acc, val) => acc + val, 0);
                     if (total === 0) return { pValue: 1, pValuePercent: 100, isSignificant: false };
                     
@@ -5433,7 +5458,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const pct = patternRounds ? count / patternRounds * 100 : 0;
                         const sd = patternRounds > 0 ? Math.sqrt(p * (1 - p) / patternRounds) * 100 : 0;
                         return {
-                            count, pct, specPct, diff: pct - specPct,
+                            count, pct, specPct, diff: pct - specPct, sd,
                             z: sd > 0 ? (pct - specPct) / sd : 0
                         };
                     };
@@ -5463,18 +5488,25 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         return sum / 9 || 1;
                     })();
 
-                    const chiSq = (counts) => {
+                    // clustered = 這張表的每一局是否貢獻多個觀測。
+                    // 只有「全部球的落點」是 —— 它每局把三顆球各記一次(balls9), 球之間會擠在一起。
+                    // pairCells / tripleCells / oddCells 每一局只貢獻一個觀測(哪一格重複、哪一格落單),
+                    // 局與局之間獨立, 沒有群聚可以校正。照套 deff 會把卡方與 z 壓小
+                    // (實測 deff=1.17 -> 卡方 -15%、z -8%), 方向偏保守, 結果是該報的偏離報不出來。
+                    const chiSq = (counts, clustered) => {
                         const total = counts.reduce((a, b) => a + b, 0);
                         if (!total) return 0;
                         const e = total / 9;
                         const raw = counts.reduce((s, o) => s + Math.pow(o - e, 2) / e, 0);
-                        return raw / designEffect;
+                        return clustered ? raw / designEffect : raw;
                     };
-                    const cellRows = (counts) => {
+                    const cellRows = (counts, clustered) => {
                         const total = counts.reduce((a, b) => a + b, 0);
                         const e = total / 9;
                         return counts.map((c, i) => {
-                            const z = e > 0 ? (c - e) / Math.sqrt(e * (1 - 1 / 9)) / Math.sqrt(designEffect) : 0;
+                            const raw = e > 0 ? (c - e) / Math.sqrt(e * (1 - 1 / 9)) : 0;
+                            // 卡方 ÷ deff 對應到 z ÷ √deff(卡方 ≈ Σz²), 見 chiSq 上方的說明
+                            const z = clustered ? raw / Math.sqrt(designEffect) : raw;
                             return {
                                 place: i + 1, count: c,
                                 pct: total ? c / total * 100 : 0,
@@ -5493,7 +5525,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         pairCells: cellRows(pairCells), pairChi: chiSq(pairCells),
                         tripleCells: cellRows(tripleCells), tripleChi: chiSq(tripleCells),
                         oddChi: chiSq(oddCells), deff: designEffect,
-                        allCells: cellRows(balls9), allChi: chiSq(balls9)
+                        // 只有這一張每局貢獻三顆球, 所以只有它要 deff 校正
+                        allCells: cellRows(balls9, true), allChi: chiSq(balls9, true)
                     };
 
                     // --- 依顆粒度切桶, 每桶一張九宮格熱力圖 ---
