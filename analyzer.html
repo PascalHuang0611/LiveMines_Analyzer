@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.76</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.77</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -729,45 +729,42 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     <div class="relative h-64">
                         <canvas id="gridsBetChart"></canvas>
                     </div>
-                    <p class="text-xs text-gray-400 mt-3 text-center">X軸：單局押注的格子數量 (1~9格) / Y軸：發生的人次佔比 (%)</p>
+                    <p class="text-xs text-gray-400 mt-3 text-center">X軸：單局押注的格子數量 (1~9格) / Y軸：<span class="text-gray-300">該群內</span>的人次佔比 (%)</p>
+                    <p class="text-[11px] text-gray-500 mt-1 text-center">分群與上方卡片一致；每群各自以自己的人次為分母，所以三條加起來不是 100%，要比的是同一格數上各群的高低。</p>
                 </div>
 
                 <!-- 落球冷熱區 -->
                 <div class="glass rounded-2xl p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                            版面冷熱區 (Hot Zones)
-                        </h3>
-                        <div class="flex gap-2">
-                            <button @click="hotzoneMode = 'ball'" 
-                                :class="hotzoneMode === 'ball' ? 'bg-cyan-600 text-white' : 'bg-gray-800 text-gray-400'"
-                                class="px-3 py-1 rounded-md text-xs font-bold transition-colors">落球</button>
-                            <button @click="hotzoneMode = 'free'"
-                                :class="hotzoneMode === 'free' ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400'"
-                                title="每局固定開出的免費閃電位置（每局 2~3 格）"
-                                class="px-3 py-1 rounded-md text-xs font-bold transition-colors">免費閃電</button>
-                            <button @click="hotzoneMode = 'paid'"
-                                :class="hotzoneMode === 'paid' ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400'"
-                                title="EXBET 加購買到的額外閃電位置（每局固定 3 格）。每一局都會開，與有沒有人購買無關，所以分母跟另外兩個一樣是全部局數。"
-                                class="px-3 py-1 rounded-md text-xs font-bold transition-colors">付費閃電</button>
+                    <div class="flex flex-wrap justify-between items-baseline gap-2 mb-4">
+                        <h3 class="text-lg font-bold text-white">版面冷熱區 (Hot Zones)</h3>
+                        <p class="text-xs text-gray-500">此為「物理賽果」統計，剔除了同局重複計算。</p>
+                    </div>
+
+                    <!-- 三張一起顯示, 不做切換。落球是遊戲給的、免費閃電是每局固定送的、
+                         付費閃電是玩家花錢買的 —— 要看的正是「這三種的分布一不一樣」,
+                         切換的話得靠記憶去比。三張都跟上面的盤面押注偏好共用同一個九宮格方位。 -->
+                    <div class="flex flex-wrap justify-center gap-x-8 gap-y-5 mb-3">
+                        <div v-for="src in [{ k: 'ball', t: '落球', note: '每局 3 顆', c: 'text-cyan-300' }, { k: 'free', t: '免費閃電', note: '每局 2~3 格', c: 'text-yellow-300' }, { k: 'paid', t: '付費閃電', note: '每局固定 3 格', c: 'text-emerald-300' }]" :key="src.k">
+                            <div class="text-center mb-2">
+                                <div class="text-xs font-bold" :class="src.c">{{ src.t }}</div>
+                                <div class="text-[10px] text-gray-500">{{ src.note }}　共 {{ heatTotalOf(src.k).toLocaleString() }} 次</div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-1.5 w-40 h-40">
+                                <div v-for="i in 9" :key="i"
+                                    class="rounded-lg flex flex-col items-center justify-center font-bold transition-all shadow-lg"
+                                    :style="{ backgroundColor: heatCellOf(src.k, i).bg, color: heatCellOf(src.k, i).fg }"
+                                    :title="`${src.t}　第 ${i} 格　${getHeatCount(src.k, i).toLocaleString()} 次\n占比 ${(heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${heatCellOf(src.k, i).z.toFixed(2)}`">
+                                    <span class="text-lg">{{ i }}</span>
+                                    <span class="text-[9px] opacity-80">{{ getHeatCount(src.k, i).toLocaleString() }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="grid grid-cols-3 gap-2 w-48 h-48 mx-auto mb-4">
-                        <div v-for="i in 9" :key="i"
-                            class="rounded-lg flex flex-col items-center justify-center font-bold transition-all shadow-lg"
-                            :style="{ backgroundColor: heatCellOf(i).bg, color: heatCellOf(i).fg }"
-                            :title="`第 ${i} 格　${getHeatCount(i).toLocaleString()} 次\n占比 ${(heatTotal ? getHeatCount(i)/heatTotal*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${heatCellOf(i).z.toFixed(2)}`">
-                            <span class="text-xl">{{ i }}</span>
-                            <span class="text-[10px] opacity-80 mt-1">{{ getHeatCount(i).toLocaleString() }}次</span>
-                        </div>
-                    </div>
-                    <div class="flex justify-between items-end mt-2">
-                        <div v-if="hotzoneMode === 'ball'" class="text-xs font-bold" :class="chiSquareTest.isSignificant ? 'text-red-500' : 'text-gray-400'" title="檢查各格子的出現次數是否均勻，完美均勻時卡方 P-value 應較大。小於 5% 顯示紅色代表分布可能異常。">
-                            卡方檢定 (P-Value): {{ chiSquareTest.pValuePercent.toFixed(2) }}%
-                        </div>
-                        <div v-else></div>
-                        <p class="text-xs text-gray-500 max-w-[60%] text-right">此為「物理賽果」統計，剔除了同局重複計算。</p>
+                    <!-- 卡方只給落球: 閃電每局開 2~3 格且不重複, 群聚結構與落球不同,
+                         沿用同一套檢定會給出看起來正常但沒有根據的 P 值。 -->
+                    <div class="text-xs font-bold text-center" :class="chiSquareTest.isSignificant ? 'text-red-500' : 'text-gray-400'"
+                        title="只針對落球。檢查各格出現次數是否均勻，完美均勻時 P-value 應較大；小於 5% 顯示紅色代表分布可能異常。">
+                        落球卡方檢定 (P-Value): {{ chiSquareTest.pValuePercent.toFixed(2) }}%
                     </div>
                 </div>
             </div>
@@ -2277,7 +2274,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 const ballCounts = ref(Array(9).fill(0));
                 const lightningCounts = ref(Array(9).fill(0));      // 免費閃電
                 const paidLightningCounts = ref(Array(9).fill(0));  // 付費閃電(EXBET 買到的那幾格)
-                const hotzoneMode = ref('ball'); // 'ball' | 'free' | 'paid'
+
 
                 const playersMap = ref({});
                 const physicalGames = ref({}); // gameCode -> { rawRes, rawLight }, 給押注/開獎對照用
@@ -4602,7 +4599,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 };
 
                 const computeClusters = () => {
-                    const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0,
+                    // gridsDist: 該群「單局押 N 格」的人次(索引 0 = 1 格)。玩家身上本來就有 p.gridsDist,
+                    // 這裡只是照分群加起來 —— 不必再掃一次 rounds。
+                    const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0, gridsDist: Array(9).fill(0),
                         comp: { all: blankComp(), ex: blankComp(), plain: blankComp() },
                         });
                     // 「全站」也做成一個分群 —— 這樣卡片、RTP 組成、逐格明細那些現成的東西
@@ -4637,6 +4636,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             cl.payout += p.totalPayout;
                             cl.grids += p.totalGrids;
                             if (p.placeCounts) for (let i = 0; i < 9; i++) cl.placeCounts[i] += p.placeCounts[i];
+                            if (p.gridsDist) for (const g in p.gridsDist) {
+                                const gi = parseInt(g) - 1;
+                                if (gi >= 0 && gi < 9) cl.gridsDist[gi] += p.gridsDist[g];
+                            }
                             cl.rounds += p.roundsCount;
                             cl.hitRounds += p.totalHitRounds;
                             cl.winRounds += p.totalWinRounds;
@@ -4783,33 +4786,42 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         gridsChartInstance.destroy();
                     }
 
-                    const labels = Object.keys(gridsBetDist.value).map(k => `${k}格`);
-                    const totalRounds = totalPlayerRounds.value || 1;
-                    const data = Object.values(gridsBetDist.value).map(v => (v / totalRounds * 100).toFixed(1));
+                    // 跟上面的分群卡片對應: 卡片顯示哪幾群, 這裡就畫哪幾群。
+                    // 每一群各自用「該群的人次」當分母(不是全站), 否則休閒玩家人多會把另外兩群壓平,
+                    // 而這張圖要看的是「同樣是一局, 各群偏好押幾格」—— 那是群內的組成比例。
+                    const labels = Array.from({ length: 9 }, (_, i) => `${i + 1}格`);
+                    const SEG_COLOR = {
+                        '高價值玩家': 'rgba(129, 140, 248,',
+                        '中階玩家': 'rgba(34, 211, 238,',
+                        '休閒玩家': 'rgba(148, 163, 184,',
+                        '全站': 'rgba(52, 211, 153,'
+                    };
+                    const datasets = (shownSegments.value || []).map(seg => {
+                        const cl = (clusterStats.value || {})[seg];
+                        const d = (cl && cl.gridsDist) || Array(9).fill(0);
+                        const tot = d.reduce((a, b) => a + b, 0) || 1;
+                        const hue = SEG_COLOR[seg] || 'rgba(99, 102, 241,';
+                        return {
+                            label: seg,
+                            data: d.map(v => +(v / tot * 100).toFixed(1)),
+                            backgroundColor: hue + ' 0.6)',
+                            borderColor: hue + ' 1)',
+                            borderWidth: 1, borderRadius: 4
+                        };
+                    });
 
                     gridsChartInstance = new Chart(ctx, {
                         type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: '人次佔比',
-                                data: data,
-                                backgroundColor: 'rgba(99, 102, 241, 0.6)',
-                                borderColor: 'rgba(99, 102, 241, 1)',
-                                borderWidth: 1,
-                                borderRadius: 4
-                            }]
-                        },
+                        data: { labels, datasets },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
                             plugins: {
-                                legend: { display: false },
+                                legend: { display: true, position: 'bottom',
+                                          labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
                                 tooltip: {
                                     callbacks: {
-                                        label: function(context) {
-                                            return context.parsed.y + '%';
-                                        }
+                                        label: (c) => `${c.dataset.label} ${c.parsed.y}%`
                                     }
                                 }
                             },
@@ -4833,6 +4845,13 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     });
                 };
 
+                // 這張圖現在吃 clusterStats 與 shownSegments, 而它們會在「改分群門檻」與
+                // 「切換分群/全站」時變 —— 這兩件事都不會走 rebuildFromRounds(那裡才有原本唯一的
+                // renderChart 呼叫), 少了這條 watch 就會出現「卡片已經換群、下面的圖還是上一組」。
+                watch([clusterStats, cardMode], () => {
+                    if (activeTab.value === 'player' && hasData.value) nextTick(renderChart);
+                });
+
                 const openBetTrend = () => {
                     showBetTrendModal.value = true;
                 };
@@ -4850,21 +4869,22 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 三種模式共用同一個來源選擇。原本四個地方各寫一次「ball ? A : B」的三元運算,
                 // 加第三種模式時漏掉任何一處, 那一處就會靜默沿用免費閃電的數字。
                 const HOTZONE_SRC = { ball: ballCounts, free: lightningCounts, paid: paidLightningCounts };
-                const heatCounts = () => (HOTZONE_SRC[hotzoneMode.value] || ballCounts).value;
-                const getHeatCount = (index) => heatCounts()[index - 1];
+                const countsOf = (k) => (HOTZONE_SRC[k] || ballCounts).value;
+                const getHeatCount = (k, index) => countsOf(k)[index - 1];
 
                 // 顏色走跟大盤落球熱力圖同一支 divergingCell —— 紅=偏高、白=接近期望、藍=偏低,
                 // 兩處的顏色語言一致才不用重新學。deff 傳 1: 這裡只要顏色規則相同,
                 // 不套大盤那邊的 design effect 校正(那是為了卡方顯著性, 屬於統計而非配色)。
-                const heatTotal = computed(() => heatCounts().reduce((a, b) => a + b, 0));
-                const heatCellOf = (index) => {
-                    const counts = heatCounts();
+                const heatTotalOf = (k) => countsOf(k).reduce((a, b) => a + b, 0);
+                const heatCellOf = (k, index) => {
+                    const counts = countsOf(k);
                     const total = counts.reduce((a, b) => a + b, 0);
                     return divergingCell(counts[index - 1], total, 1);
                 };
 
+                // 只給落球用 —— 閃電那兩張沒有配對應的檢定, 見樣板上的說明。
                 const chiSquareTest = computed(() => {
-                    const counts = heatCounts();
+                    const counts = ballCounts.value;
                     const total = counts.reduce((acc, val) => acc + val, 0);
                     if (total === 0) return { pValue: 1, pValuePercent: 100, isSignificant: false };
                     
@@ -5931,7 +5951,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
-                    handleFileSelect, gridsBetDist, hotzoneMode, getHeatCount, heatCellOf, heatTotal,
+                    handleFileSelect, gridsBetDist, getHeatCount, heatCellOf, heatTotalOf,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
                     nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
