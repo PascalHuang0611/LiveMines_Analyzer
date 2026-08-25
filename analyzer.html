@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.68</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.69</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -512,7 +512,7 @@
                          不是「那天怎麼玩」, 所以切視角不會變。 -->
                     <div v-if="clusterStats[seg] && clusterStats[seg].retention !== null && clusterStats[seg].retention !== undefined"
                         class="text-sm text-gray-400 mb-1 cursor-help"
-                        :title="`當天有玩的人, 隔天還在的比例(全體, 不分新舊玩家、不分有沒有買 EXBET)。\n區間最後一天沒有隔天, 不列入。\n分子 (隔天回來的人次): ${clusterStats[seg].retKept.toLocaleString()}\n分母 (當天有玩的人次): ${clusterStats[seg].retCohort.toLocaleString()}\n這是把各天加總後相除, 不是各天比率的平均${clusterStats[seg].retSkipped ? '\n已排除 ' + clusterStats[seg].retSkipped + ' 天(隔天只涵蓋部分時段, 會低估留存)' : ''}`">
+                        :title="`當天有玩的人, 隔天還在的比例(全體, 不分新舊玩家、不分有沒有買 EXBET)。\n區間最後一天沒有隔天, 不列入。\n分子 (隔天回來的人次): ${clusterStats[seg].retKept.toLocaleString()}\n分母 (當天有玩的人次): ${clusterStats[seg].retCohort.toLocaleString()}\n這是把各天加總後相除, 不是各天比率的平均${clusterStats[seg].retSkipped ? '\n已排除 ' + clusterStats[seg].retSkipped + ' 天(隔天的資料不完整, 會低估留存)' : ''}`">
                         <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">D+1 留存率</span>: <span class="text-emerald-300 font-bold">
                         {{ clusterStats[seg].retention.toFixed(1) }}%
                     </span></div>
@@ -1342,7 +1342,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <div class="h-64"><canvas id="trendRtpChart"></canvas></div>
                                 <div class="text-xs text-gray-400 mt-5 mb-1">每日 RTP 組成<span class="text-gray-600 ml-2">柱高＝當日 RTP，與上圖同一條線</span></div>
                                 <div class="h-64"><canvas id="trendCompChart"></canvas></div>
-                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">當天有玩的人隔天還在的比例；與上方的 全體／有 EX／沒 EX 無關，切換不會變</span></div>
+                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">當天有玩的人隔天還在的比例；與上方的 全體／有 EX／沒 EX 無關，切換不會變。空心點＝隔天資料不完整，該值被低估且未計入平均</span></div>
                                 <div v-if="dailyTrendRetention.length" class="h-56"><canvas id="trendRetChart"></canvas></div>
                             </div>
                         </div>
@@ -4418,7 +4418,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                             return [`D+1 留存 ${r.rate.toFixed(2)}%`,
                                                     `當天 ${r.cohort.toLocaleString()} 人`,
                                                     `隔天回來 ${r.kept.toLocaleString()} 人`,
-                                                    r.partial ? '隔天只涵蓋部分時段，會低估' : ''].filter(Boolean);
+                                                    r.partial ? '隔天資料不完整，此值被低估，未計入平均' : ''].filter(Boolean);
                                         }
                                     } }
                                 },
@@ -4464,8 +4464,16 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     ds.forEach(d => {
                         const nd = nextDayKey(d);
                         if (nd > lastDay) return;
+                        // 判準是「D+1 那天的資料完不完整」, 而且一定要用 dayCoveredFully 而不是
+                        // isPartialDay —— 後者刻意只標「使用者的範圍切到那天」, 抓不到「資料本身
+                        // 就只匯到一半」。實測 08-24 的 CSV 只到 06:54, 而 rangeTo 預設就等於資料
+                        // 結尾, 所以 isPartialDay('2026-08-24') 是 false, 那天不完整的事實會被吞掉,
+                        // 讓 08-23 的留存被靜默低估(隔天下午晚上的人根本還沒進資料)。
+                        //
+                        // 只看 D+1 不看 D: D+1 不完整 = 分子直接被砍 = 系統性低估;
+                        // D 不完整只是分母變成當天的一個子集, 比率仍然是有意義的估計。
                         out.push({ day: d, next: nd, cohort: 0, kept: 0,
-                                   partial: isPartialDay(d) || isPartialDay(nd) });
+                                   partial: !dayCoveredFully(nd) });
                     });
                     return out;
                 };
