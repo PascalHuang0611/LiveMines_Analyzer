@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.72</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.73</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -314,16 +314,6 @@
                 </div>
             </div>
 
-            <div class="text-xs ml-auto text-right shrink-0">
-                <div v-if="!rangeIsFull" class="text-amber-400">已篩選 · 兩個分頁的數字都只計入此範圍</div>
-                <!-- 只載入 game_results 時沒有玩家單局, 顯示「0 筆」會被當成篩掉了 -->
-                <div v-if="hasData" class="text-gray-500">
-                    此範圍 {{ activeRounds.length.toLocaleString() }} 筆玩家單局
-                    <span v-if="!rangeIsFull" class="text-gray-600">／ 全部 {{ allRounds.length.toLocaleString() }}</span>
-                </div>
-                <div v-else class="text-gray-500">尚未載入注單檔，僅大盤資料</div>
-            </div>
-
             <div class="basis-full">
                 <!-- 重算是同步的一整塊, 沒有提示的話看起來就是整頁當掉 -->
                 <div v-if="isRecomputing" class="text-[11px] text-indigo-300 mb-1 flex items-center gap-2">
@@ -341,17 +331,32 @@
                     <button @click="resetRange()"
                         class="text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 rounded px-1.5 py-px transition-colors">改為全部</button>
                 </div>
-                <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span class="font-mono text-gray-400">目前範圍 {{ rangeTextShort() }}</span>
-                    <span v-if="hasPartialDay"
-                        class="text-[10px] text-amber-300 border border-amber-400/40 rounded px-1 py-px"
-                        title="範圍的邊界切在某一天中間，那一天的每日欄位與餘額只涵蓋部分時段">部分時段</span>
-                    <span class="text-gray-600">
-                        篩選用實際時間、精確到分（起含當分 00 秒、迄含當分 59 秒）。
-                        日期欄位——排行榜每日欄、每日明細卡片、CSV 日期欄——以每日
-                        {{ String(dayCutoverHour).padStart(2,'0') }}:00 為{{ dayTermLabel }}分界{{ dayRationale }}，
-                        也就是 {{ dayBoundaryText }}，所以邊界那一天可能只涵蓋部分時段，會標上「部分」。
+                <!-- 「目前範圍」與「此範圍幾筆」講的是同一件事的兩面, 放同一行。
+                     這一塊原本掛在上面那排控件的尾巴(ml-auto), 但控件加總已經吃掉容器的九成寬,
+                     它塞不下就會自己換行、又被 ml-auto 推到最右 —— 變成一行孤零零的右側文字,
+                     左邊八百多 px 全空。搬下來之後上排乾淨, 這一行也左右都有內容。 -->
+                <div class="text-[11px] flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span class="font-mono text-gray-400">目前範圍 {{ rangeTextShort() }}</span>
+                        <span v-if="hasPartialDay"
+                            class="text-[10px] text-amber-300 border border-amber-400/40 rounded px-1 py-px"
+                            title="範圍的邊界切在某一天中間，那一天的每日欄位與餘額只涵蓋部分時段">部分時段</span>
                     </span>
+                    <span class="text-right shrink-0">
+                        <span v-if="!rangeIsFull" class="text-amber-400">已篩選 · 兩個分頁的數字都只計入此範圍</span>
+                        <!-- 只載入 game_results 時沒有玩家單局, 顯示「0 筆」會被當成篩掉了 -->
+                        <span v-if="hasData" class="text-gray-500 ml-2">
+                            此範圍 {{ activeRounds.length.toLocaleString() }} 筆玩家單局<span
+                                v-if="!rangeIsFull" class="text-gray-600">／全部 {{ allRounds.length.toLocaleString() }}</span>
+                        </span>
+                        <span v-else class="text-gray-500 ml-2">尚未載入注單檔，僅大盤資料</span>
+                    </span>
+                </div>
+                <div class="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                    篩選用實際時間、精確到分（起含當分 00 秒、迄含當分 59 秒）。
+                    日期欄位——排行榜每日欄、每日明細卡片、CSV 日期欄——以每日
+                    {{ String(dayCutoverHour).padStart(2,'0') }}:00 為{{ dayTermLabel }}分界{{ dayRationale }}，
+                    也就是 {{ dayBoundaryText }}，所以邊界那一天可能只涵蓋部分時段，會標上「部分」。
                 </div>
             </div>
         </div>
@@ -757,7 +762,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     </span>
                     <button @click="exportPlayerList" :disabled="!filteredPlayers.length"
                         class="ml-auto px-3 py-1.5 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30 disabled:opacity-40"
-                        :title="`把目前列表的 ${filteredPlayers.length.toLocaleString()} 位玩家匯出成 CSV，含每日投注與餘額`">
+                        :title="`把目前列表的 ${filteredPlayers.length.toLocaleString()} 位玩家匯出成 CSV，含每日投注與當日盈虧`">
                         匯出目前列表（{{ filteredPlayers.length.toLocaleString() }} 人）
                     </button>
                 </h3>
@@ -1114,17 +1119,27 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <span :class="d.close >= d.open ? 'text-green-400' : 'text-red-400'">{{ formatMoney(d.close) }}</span>
                             </div>
                             <div class="mt-2 pt-2 border-t border-white/5 flex justify-between text-xs">
-                                <span class="text-gray-400">餘額變化</span>
-                                <span class="font-bold" :class="d.delta > 0 ? 'text-green-400' : (d.delta < 0 ? 'text-red-400' : 'text-gray-400')">
-                                    {{ d.delta > 0 ? '+' : '' }}{{ formatMoney(d.delta) }}
+                                <span class="text-gray-400 border-b border-dashed border-gray-600 cursor-help"
+                                    title="這一天所有注單的 Member Win/Loss 加總（含 EXBET 加購費）。這才是當日輸贏。">當日盈虧</span>
+                                <span class="font-bold" :class="d.winLoss > 0 ? 'text-green-400' : (d.winLoss < 0 ? 'text-red-400' : 'text-gray-400')">
+                                    {{ d.winLoss > 0 ? '+' : '' }}{{ formatMoney(d.winLoss) }}
                                 </span>
+                            </div>
+                            <!-- 餘額變化排在盈虧下面、字級更小、不上色: 它含存提款, 不是輸贏。
+                                 兩個一起列的用處是「差額就是存提款」, 單獨看反而會被當成盈虧。 -->
+                            <div class="flex justify-between text-[10px] mt-0.5">
+                                <span class="text-gray-500 border-b border-dashed border-gray-700 cursor-help"
+                                    title="結束餘額 − 初始餘額。含這段期間的存提款，所以跟「當日盈虧」的差額就是存提款金額。">餘額變化</span>
+                                <span class="text-gray-500">{{ d.delta > 0 ? '+' : '' }}{{ formatMoney(d.delta) }}</span>
                             </div>
                         </div>
                     </div>
                     <p class="text-[10px] text-gray-400 mt-3 leading-relaxed">
+                        <span class="text-gray-300">當日盈虧</span>是該日所有注單的輸贏加總，這是實際的輸贏。<br>
                         餘額取<span class="text-gray-300">此時間範圍內</span>該日第一筆與最後一筆注單的快照，
                         所以標了「部分」的那一天拿到的是區間端點的餘額，不是當日開收。
-                        中間的存提款也會反映在差額裡，所以「餘額變化」不等於當日輸贏。
+                        中間的存提款也會反映在差額裡，所以「餘額變化」不等於當日輸贏 ——
+                        兩者的<span class="text-gray-300">差額就是這段期間的存提款</span>。
                     </p>
                 </div>
                 </div>
@@ -2894,7 +2909,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     rows.push(['# 每日明細']);
                     // 欄名寫「涵蓋時段/是否完整」是必要的: 選了不足一天的視窗時, 餘額是視窗端點的快照
                     // 而不是當日開收, 但數字看起來完全合理 —— 下游做樞紐分析的人會把幾小時的數字當日報用。
-                    rows.push(['日期', '涵蓋時段', '是否完整', '局數', '投注額', '區間初始餘額', '區間結束餘額', '餘額變化']);
+                    rows.push(['日期', '涵蓋時段', '是否完整', '局數', '投注額', '當日盈虧', '區間初始餘額', '區間結束餘額', '餘額變化']);
                     Object.keys(p.daily).sort().forEach(d => {
                         const x = p.daily[d];
                         // 用明確的 null 判斷而不是 ||, 否則合法的餘額 0 會跟「沒有快照」混為一談。
@@ -2902,7 +2917,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const delta = (x.open === null || x.close === null)
                             ? '' : Math.round((x.close - x.open) * 100) / 100;
                         rows.push([d, dayWindowOf(d), dayCoveredFully(d) ? '完整' : '部分',
-                            x.rounds, x.bet, x.open, x.close, delta]);
+                            x.rounds, x.bet, Math.round(x.winLoss * 100) / 100, x.open, x.close, delta]);
                     });
 
                     rows.push([]);
@@ -2940,11 +2955,15 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const d = p.daily[day];
                         return {
                             day, bet: d.bet, rounds: d.rounds,
+                            // 當日實際輸贏(Member Win/Loss 加總)。有了它, 下面那個 delta 才有辦法
+                            // 被正確理解 —— 兩個一起看, 差額就是存提款。
+                            winLoss: d.winLoss,
                             open: d.open === null ? 0 : d.open,
                             close: d.close === null ? 0 : d.close,
                             delta: (d.close === null ? 0 : d.close) - (d.open === null ? 0 : d.open),
                             // 卡片是使用者判讀初始/結束餘額的唯一介面, 而不足一天的視窗外觀與完整營運日
-                            // 毫無區別。delta 尤其危險: 它是視窗內的餘額變化, 卻被綠/紅上色成當日盈虧走向。
+                            // 毫無區別。delta 是視窗內的餘額變化, 不是輸贏 —— 所以它在卡片上排在
+                            // winLoss 下面、字級更小, 綠紅上色也讓給 winLoss。
                             partial: isPartialDay(day),
                             window: dayWindowOf(day)
                         };
@@ -5580,9 +5599,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const days = rangeDays.value;
                     const head = ['帳號', '暱稱', '分群', '總流水', '總派彩', '玩家盈虧', 'RTP(%)', '遊玩局數', '契合度', '契合度可評估局數'];
                     // 欄名只寫日期而內容是部分區間, 會讓拿到檔案的人直接把幾小時的數字當日報用
+                    // 每天兩欄, 跟排行榜畫面一致(v1.71 把餘額兩欄換成當日盈虧)。餘額仍然可以從
+                    // 單一玩家的彙總 CSV 拿到 —— 那份才是逐日餘額的來源。
                     days.forEach(d => {
                         const sfx = isPartialDay(d) ? '(部分 ' + dayWindowOf(d) + ')' : '';
-                        head.push(d + sfx + ' 投注', d + sfx + ' 區間初始餘額', d + sfx + ' 區間結束餘額');
+                        head.push(d + sfx + ' 投注', d + sfx + ' 當日盈虧');
                     });
                     const rows = [['# 日分界', dayBoundaryDecl.value], head];
                     filteredPlayers.value.forEach(p => {
@@ -5591,7 +5612,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             p.alignScore === null ? '' : p.alignScore.toFixed(1), p.alignRounds];
                         days.forEach(d => {
                             const x = p.daily[d];
-                            row.push(x ? x.bet : '', x && x.open !== null ? x.open : '', x && x.close !== null ? x.close : '');
+                            row.push(x ? x.bet : '', x ? Math.round(x.winLoss * 100) / 100 : '');
                         });
                         rows.push(row);
                     });
