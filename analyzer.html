@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.73</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.74</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -272,16 +272,37 @@
                     class="px-2 py-1 rounded border text-xs transition-colors"
                     :class="canShift(-1) ? 'text-gray-300 border-white/15 hover:bg-white/10' : 'text-gray-700 border-white/5 cursor-not-allowed'"
                     title="保持視窗長度往前平移一段">◀</button>
-                <!-- lang 決定原生控件的顯示格式。zh-TW 是 12 小時制會出現「下午」, 容易跟 24 小時的
-                     資料時間混淆; zh-Hans-CN 是 24 小時制而且維持 年/月/日 的順序,
-                     日曆面板的月份與星期字樣在繁簡下是同一批字, 所以看起來不會變。 -->
-                <input type="datetime-local" step="60" lang="zh-Hans-CN" v-model.lazy="rangeFromInput"
-                    :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
-                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm w-[255px]">
+                <!-- 顯示一律用自己的文字欄位, 保證 24 小時制(見 openRangePicker 上方的註解)。
+                     原生控件疊在日曆鈕上、透明, 只負責被點到時叫出日曆面板。 -->
+                <div class="relative flex items-center">
+                    <input type="text" inputmode="numeric" spellcheck="false" v-model.lazy="rangeFromInput"
+                        placeholder="YYYY-MM-DD HH:MM" title="24 小時制。可直接輸入，也接受 2026/08/24 08:00 這種寫法。"
+                        class="bg-slate-900 border border-white/20 rounded pl-2 pr-8 py-1 text-white text-sm font-mono w-[196px]">
+                    <span class="absolute right-1 w-6 h-6 flex items-center justify-center">
+                        <span class="text-gray-400 text-xs pointer-events-none">📅</span>
+                        <input id="rangePickFrom" type="datetime-local" step="60" tabindex="-1"
+                            :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
+                            :value="toInput16(rangeFrom)" title="用日曆選"
+                            @click="openRangePicker('from')"
+                            @change="rangeFromInput = $event.target.value"
+                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    </span>
+                </div>
                 <span class="text-gray-500">→</span>
-                <input type="datetime-local" step="60" lang="zh-Hans-CN" v-model.lazy="rangeToInput"
-                    :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
-                    class="bg-slate-900 border border-white/20 rounded px-2 py-1 text-white text-sm w-[255px]">
+                <div class="relative flex items-center">
+                    <input type="text" inputmode="numeric" spellcheck="false" v-model.lazy="rangeToInput"
+                        placeholder="YYYY-MM-DD HH:MM" title="24 小時制。可直接輸入，也接受 2026/08/24 08:00 這種寫法。"
+                        class="bg-slate-900 border border-white/20 rounded pl-2 pr-8 py-1 text-white text-sm font-mono w-[196px]">
+                    <span class="absolute right-1 w-6 h-6 flex items-center justify-center">
+                        <span class="text-gray-400 text-xs pointer-events-none">📅</span>
+                        <input id="rangePickTo" type="datetime-local" step="60" tabindex="-1"
+                            :min="toInput16(dataSpan.min)" :max="toInput16(dataSpan.max)"
+                            :value="toInput16(rangeTo)" title="用日曆選"
+                            @click="openRangePicker('to')"
+                            @change="rangeToInput = $event.target.value"
+                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    </span>
+                </div>
                 <button @click="shiftWindow(1)" :disabled="!canShift(1)"
                     class="px-2 py-1 rounded border text-xs transition-colors"
                     :class="canShift(1) ? 'text-gray-300 border-white/15 hover:bg-white/10' : 'text-gray-700 border-white/5 cursor-not-allowed'"
@@ -2296,6 +2317,22 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 };
                 // 19 碼 -> <input type="datetime-local"> 的值域 (16 碼帶 T)
                 const toInput16 = (w) => w ? w.replace(' ', 'T').slice(0, 16) : '';
+                // 給我們自己的文字欄位用: 'YYYY-MM-DD HH:MM'。跟 toInput16 只差分隔符,
+                // 但那個 T 是給原生控件看的, 不該出現在人要讀的欄位裡。
+                const toText16 = (w) => w ? w.slice(0, 16) : '';
+                // 文字欄位是人打的, 容忍常見寫法: 2026/08/24、2026.08.24、多餘空白、T 分隔。
+                const tidyTyped = (v) => String(v == null ? '' : v).trim().replace(/[/.]/g, '-').replace(/\s+/g, ' ');
+                // 原生 datetime-local 只留來叫日曆, 不拿來顯示 —— 它的顯示格式跟隨瀏覽器的 UI 語言,
+                // zh-TW 會出現「上午/下午」, 跟這個工具其他地方一律 24 小時制的時間打架
+                // (資料本身、目前範圍、圖表軸、匯出檔都是 24 小時制)。
+                // lang="zh-Hans-CN" 那個手法在部分機器上有效、部分無效 —— Chrome 並不保證採用頁面的 lang,
+                // 所以顯示改成自己畫, 日曆只在按下那顆鈕時叫出來, 這樣不管誰的機器都是 24 小時制。
+                // showPicker 是 Chrome 99+; 這個工具本來就只跑得動 Chromium(匯入用 showDirectoryPicker), 可以直接用。
+                const openRangePicker = (which) => {
+                    const el = document.getElementById(which === 'from' ? 'rangePickFrom' : 'rangePickTo');
+                    if (!el) return;
+                    try { el.showPicker(); } catch (e) { el.focus(); }
+                };
                 // 平移固定毫秒。走 wallClockMs 的「假 epoch」(把牆上時間當成 UTC) 所以不會有時區位移,
                 // 跨月/跨年/閏日交給 Date 處理, 不自己算天數。
                 const wallShift = (w, ms) => {
@@ -2557,20 +2594,20 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 送出 0002/0020/0202/2026 四個都合法的值, 當場夾到 min 的話第一個數字打完就被彈回。
                 const inputNonce = ref(0);
                 const rangeFromInput = computed({
-                    get: () => (inputNonce.value, toInput16(rangeFrom.value)),
+                    get: () => (inputNonce.value, toText16(rangeFrom.value)),
                     set: (v) => {
                         inputNonce.value++;
-                        let f = normWall19(v, '00');
+                        let f = normWall19(tidyTyped(v), '00');
                         if (!f) return;                       // 空值或不合法 -> 維持原值, 欄位彈回
                         if (rangeTo.value && f > rangeTo.value) f = rangeTo.value.slice(0, 16) + ':00';
                         setRange(f, rangeTo.value || f, 'exact');
                     }
                 });
                 const rangeToInput = computed({
-                    get: () => (inputNonce.value, toInput16(rangeTo.value)),
+                    get: () => (inputNonce.value, toText16(rangeTo.value)),
                     set: (v) => {
                         inputNonce.value++;
-                        let t = normWall19(v, '59');
+                        let t = normWall19(tidyTyped(v), '59');
                         if (!t) return;
                         if (rangeFrom.value && t < rangeFrom.value) t = rangeFrom.value.slice(0, 16) + ':59';
                         setRange(rangeFrom.value || t, t, 'exact');
@@ -5818,7 +5855,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     isProcessing, hasData, processedFiles, totalRawRows, duplicateBills,
                     dismissedNotices, dismissNotice,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
-                    rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16,
+                    rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16, openRangePicker,
                     shiftWindow, canShift, snapToWholeDays,
                     isPartialDay, dayWindowOf, dayCoveredFully, hasPartialDay, rangeTextShort, ballGranDisabled,
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
