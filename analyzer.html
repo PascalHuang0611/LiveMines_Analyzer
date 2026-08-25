@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.69</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.70</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -512,7 +512,7 @@
                          不是「那天怎麼玩」, 所以切視角不會變。 -->
                     <div v-if="clusterStats[seg] && clusterStats[seg].retention !== null && clusterStats[seg].retention !== undefined"
                         class="text-sm text-gray-400 mb-1 cursor-help"
-                        :title="`當天有玩的人, 隔天還在的比例(全體, 不分新舊玩家、不分有沒有買 EXBET)。\n區間最後一天沒有隔天, 不列入。\n分子 (隔天回來的人次): ${clusterStats[seg].retKept.toLocaleString()}\n分母 (當天有玩的人次): ${clusterStats[seg].retCohort.toLocaleString()}\n這是把各天加總後相除, 不是各天比率的平均${clusterStats[seg].retSkipped ? '\n已排除 ' + clusterStats[seg].retSkipped + ' 天(隔天的資料不完整, 會低估留存)' : ''}`">
+                        :title="`當天有玩的人, 隔天還在的比例(全體, 不分新舊玩家、不分有沒有買 EXBET)。\n區間最後一天沒有隔天, 不列入。\n分子 (隔天回來的人次): ${clusterStats[seg].retKept.toLocaleString()}\n分母 (當天有玩的人次): ${clusterStats[seg].retCohort.toLocaleString()}\n這是把各天加總後相除, 不是各天比率的平均\n最新那一天的隔天還沒過完, 該點會偏低, 下次匯入就會長回去`">
                         <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">D+1 留存率</span>: <span class="text-emerald-300 font-bold">
                         {{ clusterStats[seg].retention.toFixed(1) }}%
                     </span></div>
@@ -1342,7 +1342,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <div class="h-64"><canvas id="trendRtpChart"></canvas></div>
                                 <div class="text-xs text-gray-400 mt-5 mb-1">每日 RTP 組成<span class="text-gray-600 ml-2">柱高＝當日 RTP，與上圖同一條線</span></div>
                                 <div class="h-64"><canvas id="trendCompChart"></canvas></div>
-                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">當天有玩的人隔天還在的比例；與上方的 全體／有 EX／沒 EX 無關，切換不會變。空心點＝隔天資料不完整，該值被低估且未計入平均</span></div>
+                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">當天有玩的人隔天還在的比例；與上方的 全體／有 EX／沒 EX 無關，切換不會變。最右邊沒有點是因為沒有隔天可比；倒數第二點會偏低（隔天還沒過完），下次匯入就會長回去</span></div>
                                 <div v-if="dailyTrendRetention.length" class="h-56"><canvas id="trendRetChart"></canvas></div>
                             </div>
                         </div>
@@ -4228,8 +4228,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const by = new Map(cl.ret.map(s => [s.day, s]));
                     return dt.days.map(d => {
                         const s = by.get(d);
-                        if (!s || s.cohort === 0) return { day: d, rate: null, cohort: 0, kept: 0, partial: false };
-                        return { day: d, rate: s.kept / s.cohort * 100, cohort: s.cohort, kept: s.kept, partial: s.partial };
+                        if (!s || s.cohort === 0) return { day: d, rate: null, cohort: 0, kept: 0 };
+                        return { day: d, rate: s.kept / s.cohort * 100, cohort: s.cohort, kept: s.kept };
                     });
                 });
 
@@ -4375,7 +4375,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const live2 = ret.filter(r => r.rate !== null);
                         const rAvg = (() => {
                             let c = 0, k = 0;
-                            ret.forEach(r => { if (!r.partial) { c += r.cohort; k += r.kept; } });
+                            ret.forEach(r => { c += r.cohort; k += r.kept; });
                             return c > 0 ? k / c * 100 : null;
                         })();
                         const rv = live2.map(r => r.rate).concat(rAvg === null ? [] : [rAvg]);
@@ -4392,8 +4392,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                         borderColor: 'rgba(52, 211, 153, 1)',
                                         backgroundColor: 'rgba(52, 211, 153, 0.10)',
                                         fill: true, tension: 0.25, borderWidth: 2, spanGaps: false,
-                                        pointRadius: ret.map(r => r.partial ? 5 : 3), pointHoverRadius: 6,
-                                        pointBackgroundColor: ret.map(r => r.partial ? '#0f172a' : 'rgba(52,211,153,1)'),
+                                        pointRadius: 3, pointHoverRadius: 6,
+                                        pointBackgroundColor: 'rgba(52,211,153,1)',
                                         pointBorderColor: 'rgba(52,211,153,1)', pointBorderWidth: 2
                                     }
                                 ].concat(rAvg === null ? [] : [{
@@ -4417,8 +4417,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                             if (r.rate === null) return '沒有隔天可比（區間最後一天）';
                                             return [`D+1 留存 ${r.rate.toFixed(2)}%`,
                                                     `當天 ${r.cohort.toLocaleString()} 人`,
-                                                    `隔天回來 ${r.kept.toLocaleString()} 人`,
-                                                    r.partial ? '隔天資料不完整，此值被低估，未計入平均' : ''].filter(Boolean);
+                                                    `隔天回來 ${r.kept.toLocaleString()} 人`];
                                         }
                                     } }
                                 },
@@ -4464,16 +4463,16 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     ds.forEach(d => {
                         const nd = nextDayKey(d);
                         if (nd > lastDay) return;
-                        // 判準是「D+1 那天的資料完不完整」, 而且一定要用 dayCoveredFully 而不是
-                        // isPartialDay —— 後者刻意只標「使用者的範圍切到那天」, 抓不到「資料本身
-                        // 就只匯到一半」。實測 08-24 的 CSV 只到 06:54, 而 rangeTo 預設就等於資料
-                        // 結尾, 所以 isPartialDay('2026-08-24') 是 false, 那天不完整的事實會被吞掉,
-                        // 讓 08-23 的留存被靜默低估(隔天下午晚上的人根本還沒進資料)。
+                        // 刻意不判斷「隔天的資料完不完整」。匯出當天的前一天本來就會偏低(隔天還沒
+                        // 過完, 下午晚上的人還沒進資料), 但下一份匯出一進來它就自己長回去 ——
+                        // 這張圖是拿來看趨勢的, 為了一個會自動修正的點去維護一套完整性判斷,
+                        // 代價比收益大。v1.68/v1.69 做過(先用 isPartialDay 抓不到、再換成
+                        // dayCoveredFully), v1.70 拿掉。
                         //
-                        // 只看 D+1 不看 D: D+1 不完整 = 分子直接被砍 = 系統性低估;
-                        // D 不完整只是分母變成當天的一個子集, 比率仍然是有意義的估計。
-                        out.push({ day: d, next: nd, cohort: 0, kept: 0,
-                                   partial: !dayCoveredFully(nd) });
+                        // 這也順帶避開營運日模式的一個假警報: 08:00 換日時 dayEnd19 是隔天 07:59:59,
+                        // 而實測每日維護是 06:54~08:01, 資料永遠到不了那個時刻, 於是最後一個營運日
+                        // 會被永久標成「不完整」。
+                        out.push({ day: d, next: nd, cohort: 0, kept: 0 });
                     });
                     return out;
                 };
@@ -4495,7 +4494,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     // 每個分群各一份, 不能共用同一個陣列物件(共用的話四個分群會互相累加)
                     const slots = retentionSlots();
                     Object.values(clusters).forEach(cl => {
-                        cl.ret = slots.map(s => ({ day: s.day, next: s.next, partial: s.partial, cohort: 0, kept: 0 }));
+                        cl.ret = slots.map(s => ({ day: s.day, next: s.next, cohort: 0, kept: 0 }));
                     });
 
                     Object.values(playersMap.value).forEach(p => {
@@ -4543,20 +4542,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     });
                     
                     // 區間平均用「加總後相除」而不是「每天的比率再平均」—— 後者會讓只有幾十人的
-                    // 那一天跟幾千人的那一天等重。
-                    // 隔天是部分時段的日子排除在平均之外: 那天只涵蓋一段時間, 玩家可能只是還沒上線,
-                    // 算進去會系統性低估留存。折線圖仍然畫出來, 只是標成空心點。
+                    // 那一天跟幾千人的那一天等重。每一天都算進去, 包含匯出當天前一天那個偏低值。
                     Object.values(clusters).forEach(cl => {
-                        let c = 0, k = 0, cAll = 0, kAll = 0, skipped = 0;
-                        cl.ret.forEach(s => {
-                            cAll += s.cohort; kAll += s.kept;
-                            if (s.partial) skipped++; else { c += s.cohort; k += s.kept; }
-                        });
-                        const useAll = c === 0;   // 全部日子都是部分時段時的退路
-                        cl.retCohort = useAll ? cAll : c;
-                        cl.retKept = useAll ? kAll : k;
-                        cl.retention = cl.retCohort > 0 ? cl.retKept / cl.retCohort * 100 : null;
-                        cl.retSkipped = useAll ? 0 : skipped;
+                        let c = 0, k = 0;
+                        cl.ret.forEach(s => { c += s.cohort; k += s.kept; });
+                        cl.retCohort = c; cl.retKept = k;
+                        cl.retention = c > 0 ? k / c * 100 : null;
                     });
 
                     clusterStats.value = clusters;
