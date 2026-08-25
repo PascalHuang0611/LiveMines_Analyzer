@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.67</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.68</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -507,6 +507,14 @@
                         :title="`同一位玩家在同一局押多格只算一局 —— 一局就是一次 (局, 玩家), 與押幾格無關。\n分子 (總參與人次): ${clusterStats[seg]?.rounds?.toLocaleString() || 0}\n分母 (人數): ${clusterStats[seg]?.count?.toLocaleString() || 0}`">
                         <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">平均押注次數</span>: <span class="text-white font-bold">
                         {{ clusterStats[seg]?.count > 0 ? (clusterStats[seg].rounds / clusterStats[seg].count).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0.0' }} 局
+                    </span></div>
+                    <!-- D+1 留存。跟上面那排視角(全體/有EX/沒EX)無關 —— 它問的是「那天有沒有玩」,
+                         不是「那天怎麼玩」, 所以切視角不會變。 -->
+                    <div v-if="clusterStats[seg] && clusterStats[seg].retention !== null && clusterStats[seg].retention !== undefined"
+                        class="text-sm text-gray-400 mb-1 cursor-help"
+                        :title="`當天有玩的人, 隔天還在的比例(全體, 不分新舊玩家、不分有沒有買 EXBET)。\n區間最後一天沒有隔天, 不列入。\n分子 (隔天回來的人次): ${clusterStats[seg].retKept.toLocaleString()}\n分母 (當天有玩的人次): ${clusterStats[seg].retCohort.toLocaleString()}\n這是把各天加總後相除, 不是各天比率的平均${clusterStats[seg].retSkipped ? '\n已排除 ' + clusterStats[seg].retSkipped + ' 天(隔天只涵蓋部分時段, 會低估留存)' : ''}`">
+                        <span class="border-b border-dashed border-gray-500 pb-0.5 inline-block leading-tight">D+1 留存率</span>: <span class="text-emerald-300 font-bold">
+                        {{ clusterStats[seg].retention.toFixed(1) }}%
                     </span></div>
                     <div class="text-sm text-gray-400 mb-1">平均單局下注額: <span class="text-white font-bold">
                         {{ clusterStats[seg]?.rounds > 0 ? formatMoney(clusterStats[seg].turnover / clusterStats[seg].rounds) : '0.00' }}
@@ -1334,6 +1342,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <div class="h-64"><canvas id="trendRtpChart"></canvas></div>
                                 <div class="text-xs text-gray-400 mt-5 mb-1">每日 RTP 組成<span class="text-gray-600 ml-2">柱高＝當日 RTP，與上圖同一條線</span></div>
                                 <div class="h-64"><canvas id="trendCompChart"></canvas></div>
+                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">當天有玩的人隔天還在的比例；與上方的 全體／有 EX／沒 EX 無關，切換不會變</span></div>
+                                <div v-if="dailyTrendRetention.length" class="h-56"><canvas id="trendRetChart"></canvas></div>
                             </div>
                         </div>
 
@@ -4086,7 +4096,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 所以這裡的每日 RTP 跟卡片上的群體 RTP 是同一個口徑, 兩邊可以直接對照 —— 摘要列就是在對這個。
                 const dailyTrendView = ref('all');     // 自己的視角, 刻意跟卡片那排的 compView 分開
                 const dailyTrend = ref(null);
-                let trendRtpChart = null, trendCompChart = null;
+                let trendRtpChart = null, trendCompChart = null, trendRetChart = null;
 
                 // 日界一定要進 stamp —— 它決定每一局落在哪一天, 換了口徑整張圖都不一樣。
                 // 這是 cellStamp 沒有的維度(逐格明細不分日, 換日界不影響它), 漏掉就會拿
@@ -4207,6 +4217,22 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
 
                 // 天數多的時候整張圖擠成一團, 所以給每一天固定寬度、外層橫向捲動。
                 // 用 minWidth 而不是 width: 天數少時圖還是撐滿容器, 不會出現一條沒必要的捲軸。
+                // 留存序列, 對齊到跟上面兩張圖同一組日期。留存來自 clusterStats(重聚合時就算好了),
+                // 這裡只是把它排進同一條日期軸 —— 找不到的日子(區間最後一天沒有 D+1)給 null,
+                // 讓折線斷在那裡, 而不是畫成 0%。
+                const dailyTrendRetention = computed(() => {
+                    const dt = dailyTrend.value, seg = dailyTrendSeg.value;
+                    if (!dt || !seg) return [];
+                    const cl = (clusterStats.value || {})[seg];
+                    if (!cl || !cl.ret || !cl.ret.length) return [];
+                    const by = new Map(cl.ret.map(s => [s.day, s]));
+                    return dt.days.map(d => {
+                        const s = by.get(d);
+                        if (!s || s.cohort === 0) return { day: d, rate: null, cohort: 0, kept: 0, partial: false };
+                        return { day: d, rate: s.kept / s.cohort * 100, cohort: s.cohort, kept: s.kept, partial: s.partial };
+                    });
+                });
+
                 const TREND_DAY_PX = 64;
                 const dailyTrendMinWidth = computed(() => dailyTrendRows.value.length * TREND_DAY_PX);
                 // 會不會需要捲動不是「天數多不多」決定的, 是容器寬度決定的 —— 同樣 20 天,
@@ -4216,6 +4242,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 const destroyTrendCharts = () => {
                     if (trendRtpChart) { trendRtpChart.destroy(); trendRtpChart = null; }
                     if (trendCompChart) { trendCompChart.destroy(); trendCompChart = null; }
+                    if (trendRetChart) { trendRetChart.destroy(); trendRetChart = null; }
                 };
 
                 const renderDailyTrendCharts = () => {
@@ -4339,6 +4366,70 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             }
                         }
                     });
+
+                    // 第三張: D+1 留存。刻意跟上面兩張共用同一組 labels 與鎖死的 y 軸寬度,
+                    // 同一天才會三張圖上下對齊 —— 「RTP 掉的那天是不是也留不住人」正是要這樣看。
+                    const ret = dailyTrendRetention.value;
+                    const retEl = document.getElementById('trendRetChart');
+                    if (retEl && ret.length) {
+                        const live2 = ret.filter(r => r.rate !== null);
+                        const rAvg = (() => {
+                            let c = 0, k = 0;
+                            ret.forEach(r => { if (!r.partial) { c += r.cohort; k += r.kept; } });
+                            return c > 0 ? k / c * 100 : null;
+                        })();
+                        const rv = live2.map(r => r.rate).concat(rAvg === null ? [] : [rAvg]);
+                        const rlo = rv.length ? Math.min(...rv) : 0, rhi = rv.length ? Math.max(...rv) : 100;
+                        const rpad = Math.max(1, (rhi - rlo) * 0.2);
+                        trendRetChart = new Chart(retEl, {
+                            type: 'line',
+                            data: {
+                                labels,
+                                datasets: [
+                                    {
+                                        label: 'D+1 留存',
+                                        data: ret.map(r => r.rate),
+                                        borderColor: 'rgba(52, 211, 153, 1)',
+                                        backgroundColor: 'rgba(52, 211, 153, 0.10)',
+                                        fill: true, tension: 0.25, borderWidth: 2, spanGaps: false,
+                                        pointRadius: ret.map(r => r.partial ? 5 : 3), pointHoverRadius: 6,
+                                        pointBackgroundColor: ret.map(r => r.partial ? '#0f172a' : 'rgba(52,211,153,1)'),
+                                        pointBorderColor: 'rgba(52,211,153,1)', pointBorderWidth: 2
+                                    }
+                                ].concat(rAvg === null ? [] : [{
+                                    label: '區間平均',
+                                    data: ret.map(() => rAvg),
+                                    borderColor: 'rgba(148, 163, 184, 0.8)',
+                                    borderDash: [5, 5], pointRadius: 0, borderWidth: 1, fill: false
+                                }])
+                            },
+                            options: {
+                                responsive: true, maintainAspectRatio: false, animation: false,
+                                interaction: { mode: 'index', intersect: false },
+                                plugins: {
+                                    legend: { display: true, position: 'bottom',
+                                              labels: { color: AXIS.color, boxWidth: 12, font: { size: 11 } } },
+                                    tooltip: { callbacks: {
+                                        title: dayTitle,
+                                        label: (c) => {
+                                            if (c.datasetIndex === 1) return `區間平均 ${rAvg.toFixed(2)}%`;
+                                            const r = ret[c.dataIndex];
+                                            if (r.rate === null) return '沒有隔天可比（區間最後一天）';
+                                            return [`D+1 留存 ${r.rate.toFixed(2)}%`,
+                                                    `當天 ${r.cohort.toLocaleString()} 人`,
+                                                    `隔天回來 ${r.kept.toLocaleString()} 人`,
+                                                    r.partial ? '隔天只涵蓋部分時段，會低估' : ''].filter(Boolean);
+                                        }
+                                    } }
+                                },
+                                scales: {
+                                    y: { min: Math.max(0, rlo - rpad), max: Math.min(100, rhi + rpad), afterFit: lockY,
+                                         grid: GRID, ticks: { color: AXIS.color, callback: (v) => v.toFixed(0) + '%' } },
+                                    x: { grid: { display: false }, ticks: { color: AXIS.color, autoSkip: false, maxRotation: 0 } }
+                                }
+                            }
+                        });
+                    }
                 };
 
                 // 開圖、換群、換視角、算完 都要重畫; 關掉就銷毀, 否則 canvas 被 v-if 拔掉之後
@@ -4348,6 +4439,36 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     if (!seg) { destroyTrendCharts(); return; }
                     nextTick(() => renderDailyTrendCharts());
                 });
+
+                // ===== D+1 留存 =====
+                // 「當天有玩的人, 隔天還在的比例」, 全體口徑 —— 不分有沒有買 EXBET, 也不分新舊玩家。
+                // 資料現成: p.daily 的 key 就是「這位玩家玩過哪幾天」, 而且跟著日界設定走,
+                // 所以完全不必重掃 allRounds, 只要問兩個 key 在不在。實測 42,552 人 x 15 天約 150ms,
+                // 相對於重聚合本來就要花的十幾秒可以忽略, 因此直接算在 computeClusters 裡, 不另做延後計算。
+                //
+                // 隔天一定要用「真正的日曆隔天」而不是 rangeDays 的下一個元素:
+                // availableDays 只收有資料的日子, 中間整天沒人玩就會斷號, 用下一個元素等於把 D+2
+                // 當成 D+1 —— 會把「那天根本沒人玩」這個事實變成一個看起來很正常的留存率。
+                const nextDayKey = (d) => {
+                    const t = Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) + 86400000;
+                    const x = new Date(t), q = n => String(n).padStart(2, '0');
+                    return `${x.getUTCFullYear()}-${q(x.getUTCMonth() + 1)}-${q(x.getUTCDate())}`;
+                };
+                // 只有「隔天還落在範圍內」的 D 才算得出留存。區間最後一天沒有 D+1,
+                // 把它算進去會得到 0%, 而那不是留存差, 是資料到此為止。
+                const retentionSlots = () => {
+                    const ds = rangeDays.value;
+                    if (ds.length < 2) return [];
+                    const lastDay = ds[ds.length - 1];
+                    const out = [];
+                    ds.forEach(d => {
+                        const nd = nextDayKey(d);
+                        if (nd > lastDay) return;
+                        out.push({ day: d, next: nd, cohort: 0, kept: 0,
+                                   partial: isPartialDay(d) || isPartialDay(nd) });
+                    });
+                    return out;
+                };
 
                 const computeClusters = () => {
                     const initStats = () => ({ count: 0, turnover: 0, payout: 0, grids: 0, rounds: 0, hitRounds: 0, winRounds: 0, placeCounts: Array(9).fill(0), exbetPlayers: 0, exbetRounds: 0,
@@ -4363,6 +4484,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         '休閒玩家': initStats(),
                         [ALL_SEG]: initStats()
                     };
+                    // 每個分群各一份, 不能共用同一個陣列物件(共用的話四個分群會互相累加)
+                    const slots = retentionSlots();
+                    Object.values(clusters).forEach(cl => {
+                        cl.ret = slots.map(s => ({ day: s.day, next: s.next, partial: s.partial, cohort: 0, kept: 0 }));
+                    });
 
                     Object.values(playersMap.value).forEach(p => {
                         const avgBet = p.totalTurnover / p.roundsCount;
@@ -4385,6 +4511,15 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             cl.winRounds += p.totalWinRounds;
                             cl.exbetRounds += p.exbetRounds;
                             if (p.exbetRounds > 0) cl.exbetPlayers += 1;
+                            // D+1 留存。p.daily 只含範圍內的日子(它是從 activeRounds 建的),
+                            // 所以這裡不必再篩一次範圍。
+                            const pd = p.daily;
+                            if (pd) for (let i = 0; i < cl.ret.length; i++) {
+                                const s = cl.ret[i];
+                                if (!pd[s.day]) continue;
+                                s.cohort++;
+                                if (pd[s.next]) s.kept++;
+                            }
                             ['all', 'ex', 'plain'].forEach(k => {
                                 const src = p.comp[k], dst = cl.comp[k];
                                 dst.bet += src.bet; dst.payout += src.payout; dst.rounds += src.rounds;
@@ -4399,6 +4534,23 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         });
                     });
                     
+                    // 區間平均用「加總後相除」而不是「每天的比率再平均」—— 後者會讓只有幾十人的
+                    // 那一天跟幾千人的那一天等重。
+                    // 隔天是部分時段的日子排除在平均之外: 那天只涵蓋一段時間, 玩家可能只是還沒上線,
+                    // 算進去會系統性低估留存。折線圖仍然畫出來, 只是標成空心點。
+                    Object.values(clusters).forEach(cl => {
+                        let c = 0, k = 0, cAll = 0, kAll = 0, skipped = 0;
+                        cl.ret.forEach(s => {
+                            cAll += s.cohort; kAll += s.kept;
+                            if (s.partial) skipped++; else { c += s.cohort; k += s.kept; }
+                        });
+                        const useAll = c === 0;   // 全部日子都是部分時段時的退路
+                        cl.retCohort = useAll ? cAll : c;
+                        cl.retKept = useAll ? kAll : k;
+                        cl.retention = cl.retCohort > 0 ? cl.retKept / cl.retCohort * 100 : null;
+                        cl.retSkipped = useAll ? 0 : skipped;
+                    });
+
                     clusterStats.value = clusters;
                 };
 
@@ -5620,7 +5772,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dismissedRounds, dismissRound, restoreRound, clearDismissed, showDismissed,
                     cellDetailSeg, cellStatsOf, cellTotalsOf, openCellDetail, cellStats, exportCellDetailPng,
                     dailyTrendSeg, dailyTrendView, dailyTrendRows, dailyTrendTotal, dailyTrendMinWidth,
-                    dailyTrendScrolls, openDailyTrend, closeDailyTrend,
+                    dailyTrendScrolls, openDailyTrend, closeDailyTrend, dailyTrendRetention,
                     cellView, cellViews: CELL_VIEWS, cellCompOpen,
                     compView, compOpen, compOf, segView, compViews: COMP_VIEWS,
                     cardMode, shownSegments, compSingleViews: COMP_SINGLE_VIEWS,
