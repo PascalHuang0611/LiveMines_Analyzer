@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.71</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.72</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1173,8 +1173,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 </div>
 
                 <div class="p-6">
-                    <!-- 對帳列。九格加總不等於卡片上的群體數字, 差額就是 EXBET 加購費(那筆錢無格可歸),
-                         兩個口徑一起列出來, 讀的人才不會拿逐格 RTP 去跟卡片的群體 RTP 比。 -->
+                    <!-- 對帳列。加購費攤進各格成本之後(v1.62), 九格加總就等於卡片上的群體數字,
+                         九格合計 RTP 也等於群體 RTP。把兩邊一起列出來是為了讓這件事「看得到」——
+                         對不上就代表攤分或篩選出了問題, 不會靜默混過去。 -->
                     <div v-if="cellTotalsOf(cellDetailSeg)" class="mb-4 text-xs bg-slate-900/60 rounded-lg px-4 py-3 space-y-1">
                         <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
                             <span class="text-gray-400">九格合計（含攤入的加購費）
@@ -1238,7 +1239,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     <div class="flex justify-between"><span class="text-gray-400">GGR</span>
                                         <span class="font-mono font-bold" :class="cellStatsOf(cellDetailSeg, place).ggr >= 0 ? 'text-green-400' : 'text-red-400'">
                                             {{ formatMoney(cellStatsOf(cellDetailSeg, place).ggr) }}</span></div>
-                                    <div class="flex justify-between" title="分母是這一格的投注，不含 EXBET 加購費，所以會系統性高於含加購費的群體 RTP">
+                                    <div class="flex justify-between" title="分母是這一格的成本：格注面額 ＋ 攤到這一格的 EXBET 加購費。跟卡片上的群體 RTP 同一個口徑，可以直接比。">
                                         <span class="text-gray-400 border-b border-dashed border-gray-600">此格 RTP</span>
                                         <span class="font-mono font-bold" :class="cellStatsOf(cellDetailSeg, place).rtp >= 100 ? 'text-red-400' : 'text-green-400'">
                                             {{ cellStatsOf(cellDetailSeg, place).rtp.toFixed(2) }}%</span></div>
