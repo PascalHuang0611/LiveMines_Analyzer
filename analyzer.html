@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.82</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.83</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -456,7 +456,12 @@
             </div>
 
             <!-- Controls -->
-            <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
+            <!-- 單格大額只存在於「全站」那個視角(它跟三群重疊, 不是三群之一), 所以它的門檻
+                 只在全站模式出現 —— 分群頁籤維持原本的兩個, 概念比較乾淨。
+                 排行榜下面那排篩選鈕不受這裡影響, 四個分群隨時都可以選(它的 tooltip 會寫出
+                 目前的門檻值, 所以即使門檻欄位收起來也不會變成看不見的設定)。 -->
+            <div class="glass rounded-2xl p-6 grid grid-cols-1 gap-8 mb-6"
+                :class="cardMode === 'all' ? 'md:grid-cols-3' : 'md:grid-cols-2'">
                 <div>
                     <div class="flex justify-between items-center mb-2">
                         <label class="font-semibold text-indigo-300">高價值玩家 (平均押注 >=)</label>
@@ -476,7 +481,7 @@
                         class="w-full mt-2">
                     <span class="text-xs text-gray-400 mt-1 block">平均押注低於 {{ midValueThreshold }} 為休閒玩家</span>
                 </div>
-                <div>
+                <div v-if="cardMode === 'all'">
                     <div class="flex justify-between items-center mb-2">
                         <label class="font-semibold text-amber-300 cursor-help"
                             title="此範圍內，任何一局曾在單一格子押到這個金額以上的玩家。只看 1~9 號格，不含 EXBET 加購費。">
