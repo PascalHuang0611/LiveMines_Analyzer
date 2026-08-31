@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.85</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.86</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -2468,6 +2468,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 也刻意不掛在 round 物件上: allRounds 是 deep ref, 每個 round 被讀到就生一個 Proxy,
                 // 在 round 上多掛陣列會連帶多生 Proxy。這組 180 萬列約 38MB 且完全不進 reactive 圖。
                 let billRound = null, billCell = null, billBet = null, billPayout = null;
+                // 每一局「押在單一格子的最大金額」, 索引就是 r.idx。給「單格大額」分群用。
+                // 刻意不掛在 round 物件上: 實測(Node, 同一個 V8)在 95 萬局下多一個數字欄位要 37MB
+                // —— 那已經是第 21 個屬性, 會把物件擠出 in-object slot 而另配 properties store,
+                // 每局 40.8 bytes 而不是一個 float 的 8 bytes。用平行 TypedArray 只要 7.6MB,
+                // 而且完全不進 reactive 圖, 跟旁邊那幾條 bill 陣列同一個理由。
+                let roundMaxCell = null;
                 // RTP 五項組成也逐列留下來(二級是殘差, 不必存)。四條 Float64 在 180 萬列下約 58MB,
                 // 相對於整體 1.6GB 是 3.6% —— 可以用更省的位元打包, 但那要假設
                 // 免費閃電倍率恆為 1、購買閃電只有 1/2/3, 假設一旦被打破就是靜默錯誤。
@@ -3456,7 +3462,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     if (r.payout > 0) p.totalHitRounds++;
                     if (r.winLoss > 0) p.totalWinRounds++;
                     if (r.places) for (let i = 0; i < 9; i++) p.placeCounts[i] += r.places[i];
-                    if (r.maxCell > p.maxCellBet) p.maxCellBet = r.maxCell;
+                    // 讀平行陣列而不是 r 上的欄位, 見 roundMaxCell 的宣告處
+                    if (roundMaxCell) {
+                        const mc = roundMaxCell[r.idx] || 0;
+                        if (mc > p.maxCellBet) p.maxCellBet = mc;
+                    }
 
                     // 有沒有買 EXBET: exbetCount 或 hasExtra 任一成立都算。
                     // 舊匯出檔的 Bet Place 10 那一列可能被分頁 bug 弄丟(實測 9 組), 但 Extra Result
@@ -3791,7 +3801,6 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                                 exbetWinLoss: 0,
                                                 // RTP 五項組成
                                                 wBase: 0, wFree: 0, wPaid: 0, wJp: 0, wBonus: 0,
-                                                maxCell: 0,
                                                 hasExtra: false,     // 這局有購買閃電的落點紀錄
                                                 // 這一局在 allRounds 裡的位置。逐格金額存在另一組平行陣列裡,
                                                 // 靠這個索引對回來 —— 見 billCell/billBet/billPayout 的註解。
@@ -3802,12 +3811,6 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                         if (betPlace >= 1 && betPlace <= 9) {
                                             groupedRounds[roundKey].grids += 1;
                                             groupedRounds[roundKey].places[betPlace - 1] += 1;
-                                            // 這一局押在單一格子的最大金額。只看 1~9 ——
-                                            // Bet Place 10 是 EXBET 加購費, 不是押在格子上的錢。
-                                            // 記在局上而不是玩家上, 是因為門檻與時間範圍都可以改,
-                                            // 得先有逐局的值才能在任何範圍下重新聚合。
-                                            if (bet > groupedRounds[roundKey].maxCell) groupedRounds[roundKey].maxCell = bet;
-
                                             // 逐格拆出這一列派彩的組成
                                             const cell = String(betPlace);
                                             const hits = parseCells(row['Game Result']).filter(x => x === cell).length;
@@ -3962,6 +3965,15 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             billPayout[pos] = billPayoutArr[i];
                             billBase[pos] = billBaseArr[i]; billFree[pos] = billFreeArr[i];
                             billPaid[pos] = billPaidArr[i]; billJp[pos] = billJpArr[i];
+                        }
+                        // 逐局單格最大額。不另外收集 —— billCell/billBet 已經有逐格金額了,
+                        // 排序後掃一遍就能推出來。只看 1~9, 10 是 EXBET 加購費不算押在格子上。
+                        roundMaxCell = new Float64Array(nr);
+                        for (let i = 0; i < nb; i++) {
+                            const c = billCell[i];
+                            if (c < 1 || c > 9) continue;
+                            const ri = billRound[i];
+                            if (billBet[i] > roundMaxCell[ri]) roundMaxCell[ri] = billBet[i];
                         }
                         billRoundArr = billCellArr = billBetArr = billPayoutArr = null;
                         billBaseArr = billFreeArr = billPaidArr = billJpArr = null;
