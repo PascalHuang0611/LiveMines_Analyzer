@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.83</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.84</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -456,12 +456,12 @@
             </div>
 
             <!-- Controls -->
-            <!-- 單格大額只存在於「全站」那個視角(它跟三群重疊, 不是三群之一), 所以它的門檻
-                 只在全站模式出現 —— 分群頁籤維持原本的兩個, 概念比較乾淨。
-                 排行榜下面那排篩選鈕不受這裡影響, 四個分群隨時都可以選(它的 tooltip 會寫出
-                 目前的門檻值, 所以即使門檻欄位收起來也不會變成看不見的設定)。 -->
-            <div class="glass rounded-2xl p-6 grid grid-cols-1 gap-8 mb-6"
-                :class="cardMode === 'all' ? 'md:grid-cols-3' : 'md:grid-cols-2'">
+            <!-- 三個門檻一律常駐, 不跟著上面的「分群/全站」切換。
+                 它們是「定義分群」的全域設定, 而分群被兩邊消費: 上面的卡片, 以及下面排行榜的
+                 四顆篩選鈕(那四顆在兩種模式下都在)與玩家列表 CSV 的分群欄。
+                 v1.83 曾把單格大額那一欄收進全站模式, 但它的篩選鈕還留著 —— 等於讓一顆按鈕
+                 由看不見的設定驅動。藏三群的門檻更糟(有三顆)。所以全部常駐。 -->
+            <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
                 <div>
                     <div class="flex justify-between items-center mb-2">
                         <label class="font-semibold text-indigo-300">高價值玩家 (平均押注 >=)</label>
@@ -481,10 +481,10 @@
                         class="w-full mt-2">
                     <span class="text-xs text-gray-400 mt-1 block">平均押注低於 {{ midValueThreshold }} 為休閒玩家</span>
                 </div>
-                <div v-if="cardMode === 'all'">
+                <div>
                     <div class="flex justify-between items-center mb-2">
                         <label class="font-semibold text-amber-300 cursor-help"
-                            title="此範圍內，任何一局曾在單一格子押到這個金額以上的玩家。只看 1~9 號格，不含 EXBET 加購費。">
+                            title="此範圍內只要曾經有任何一筆單格下注達到這個金額，這位玩家就算在內 —— 看的是最大值，不是平均或次數，一次就算。只看 1~9 號格，不含 EXBET 加購費。">
                             單格大額 (單格押注 >=)
                         </label>
                         <input type="number" v-model.number="bigCellThreshold" min="0" @change="recomputeStats"
@@ -493,8 +493,8 @@
                     <input type="range" v-model.number="bigCellThreshold" min="0" :max="Math.max(10000, bigCellThreshold)" step="100" @change="recomputeStats"
                         class="w-full mt-2">
                     <span class="text-xs text-gray-400 mt-1 block">
-                        獨立的第四群，與上面三群<span class="text-gray-300">重疊</span>（同一人可能同時是高價值與單格大額）。
-                        設為 0 時人數會等於全站。
+                        此範圍內<span class="text-gray-300">曾經有過一次</span>單格下注達標就算（取最大值，不是平均或次數）。<br>
+                        獨立的第四群，與上面三群<span class="text-gray-300">重疊</span>（同一人可能同時是高價值與單格大額）。設為 0 時人數等於全站。
                     </span>
                 </div>
             </div>
