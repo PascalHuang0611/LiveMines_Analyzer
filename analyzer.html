@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.84</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.85</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -464,7 +464,9 @@
             <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
                 <div>
                     <div class="flex justify-between items-center mb-2">
-                        <label class="font-semibold text-indigo-300">高價值玩家 (平均押注 >=)</label>
+                        <label class="font-semibold text-indigo-300 border-b border-dashed border-current/40 cursor-help"
+                            title="用『該玩家在此範圍內的平均單局下注額』分群。
+三群是互斥的: 平均押注達到這個值就是高價值, 否則往下看中階的門檻。">高價值玩家 (平均押注 >=)</label>
                         <input type="number" v-model.number="highValueThreshold" min="1" @change="recomputeStats"
                             class="w-24 bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-right focus:border-indigo-500 focus:outline-none">
                     </div>
@@ -473,18 +475,22 @@
                 </div>
                 <div>
                     <div class="flex justify-between items-center mb-2">
-                        <label class="font-semibold text-cyan-300">中階玩家 (平均押注 >=)</label>
+                        <label class="font-semibold text-cyan-300 border-b border-dashed border-current/40 cursor-help"
+                            :title="`平均押注達到這個值(但未達高價值門檻)就是中階玩家。\n低於 ${midValueThreshold} 的就是休閒玩家 —— 休閒沒有自己的門檻, 它是剩下的那一群。`">中階玩家 (平均押注 >=)</label>
                         <input type="number" v-model.number="midValueThreshold" min="1" @change="recomputeStats"
                             class="w-24 bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-right focus:border-cyan-500 focus:outline-none">
                     </div>
                     <input type="range" v-model.number="midValueThreshold" min="0" :max="Math.max(1000, midValueThreshold)" step="10" @change="recomputeStats"
                         class="w-full mt-2">
-                    <span class="text-xs text-gray-400 mt-1 block">平均押注低於 {{ midValueThreshold }} 為休閒玩家</span>
                 </div>
                 <div>
                     <div class="flex justify-between items-center mb-2">
-                        <label class="font-semibold text-amber-300 cursor-help"
-                            title="此範圍內只要曾經有任何一筆單格下注達到這個金額，這位玩家就算在內 —— 看的是最大值，不是平均或次數，一次就算。只看 1~9 號格，不含 EXBET 加購費。">
+                        <label class="font-semibold text-amber-300 border-b border-dashed border-current/40 cursor-help"
+                            title="此範圍內只要曾經有任何一筆單格下注達到這個金額, 這位玩家就算在內 —— 看的是最大值, 不是平均也不是次數, 一次就算。
+只看 1~9 號格, 不含 EXBET 加購費。
+
+獨立的第四群, 與上面三群重疊(同一人可能同時是高價值與單格大額), 所以「全站 = 三群相加」仍然成立。
+設為 0 時人數會等於全站。">
                             單格大額 (單格押注 >=)
                         </label>
                         <input type="number" v-model.number="bigCellThreshold" min="0" @change="recomputeStats"
@@ -492,10 +498,6 @@
                     </div>
                     <input type="range" v-model.number="bigCellThreshold" min="0" :max="Math.max(10000, bigCellThreshold)" step="100" @change="recomputeStats"
                         class="w-full mt-2">
-                    <span class="text-xs text-gray-400 mt-1 block">
-                        此範圍內<span class="text-gray-300">曾經有過一次</span>單格下注達標就算（取最大值，不是平均或次數）。<br>
-                        獨立的第四群，與上面三群<span class="text-gray-300">重疊</span>（同一人可能同時是高價值與單格大額）。設為 0 時人數等於全站。
-                    </span>
                 </div>
             </div>
 
