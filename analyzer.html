@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.81</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.82</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -456,7 +456,7 @@
             </div>
 
             <!-- Controls -->
-            <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+            <div class="glass rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
                 <div>
                     <div class="flex justify-between items-center mb-2">
                         <label class="font-semibold text-indigo-300">高價值玩家 (平均押注 >=)</label>
@@ -475,6 +475,22 @@
                     <input type="range" v-model.number="midValueThreshold" min="0" :max="Math.max(1000, midValueThreshold)" step="10" @change="recomputeStats"
                         class="w-full mt-2">
                     <span class="text-xs text-gray-400 mt-1 block">平均押注低於 {{ midValueThreshold }} 為休閒玩家</span>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="font-semibold text-amber-300 cursor-help"
+                            title="此範圍內，任何一局曾在單一格子押到這個金額以上的玩家。只看 1~9 號格，不含 EXBET 加購費。">
+                            單格大額 (單格押注 >=)
+                        </label>
+                        <input type="number" v-model.number="bigCellThreshold" min="0" @change="recomputeStats"
+                            class="w-24 bg-gray-800 text-white border border-gray-600 rounded px-2 py-1 text-right focus:border-amber-500 focus:outline-none">
+                    </div>
+                    <input type="range" v-model.number="bigCellThreshold" min="0" :max="Math.max(10000, bigCellThreshold)" step="100" @change="recomputeStats"
+                        class="w-full mt-2">
+                    <span class="text-xs text-gray-400 mt-1 block">
+                        獨立的第四群，與上面三群<span class="text-gray-300">重疊</span>（同一人可能同時是高價值與單格大額）。
+                        設為 0 時人數會等於全站。
+                    </span>
                 </div>
             </div>
 
@@ -508,7 +524,7 @@
             </div>
 
             <!-- Segment Cards -->
-            <div class="grid gap-6" :class="cardMode === 'all' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'">
+            <div class="grid gap-6" :class="cardMode === 'all' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'">
                 <!-- 卡片本身不是篩選開關(以前是, 會跟卡片裡的點擊區誤觸)。展開/收起由上方那排負責,
                      卡片裡現在只剩「逐日走勢」「逐格明細」兩顆鈕。
                      篩選改由下方排行榜自己的按鈕負責。 -->
@@ -520,7 +536,7 @@
                     </div>
                     <div class="flex items-center justify-between gap-2 mb-4">
                         <h3 class="text-xl font-bold"
-                            :class="{'text-indigo-400': seg==='高價值玩家', 'text-cyan-400': seg==='中階玩家', 'text-gray-400': seg==='休閒玩家', 'text-emerald-400': seg==='全站'}">
+                            :class="{'text-indigo-400': seg==='高價值玩家', 'text-cyan-400': seg==='中階玩家', 'text-gray-400': seg==='休閒玩家', 'text-emerald-400': seg==='全站', 'text-amber-400': seg==='單格大額'}">
                             {{ seg }}
                         </h3>
                         <!-- 卡片右上角本來只有一塊裝飾漸層(-z-10), 鈕放在正常流裡就會蓋在它上面,
@@ -781,11 +797,13 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             :class="!segmentFilter ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'">
                             全部分群
                         </button>
-                        <button v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家']" :key="'f'+seg"
+                        <button v-for="seg in ['高價值玩家', '中階玩家', '休閒玩家', '單格大額']" :key="'f'+seg"
                             @click="segmentFilter = (segmentFilter === seg ? null : seg)"
                             class="px-2.5 py-1 rounded text-xs transition-colors border"
                             :class="segmentFilter === seg ? 'bg-indigo-600 text-white border-indigo-500' : 'text-gray-400 border-white/10 hover:bg-white/5'"
-                            :title="`只列 ${seg}（${clusterStats[seg]?.count?.toLocaleString() || 0} 人）`">
+                            :title="seg === '單格大額'
+                                ? `只列此範圍內單格押注達 ${bigCellThreshold} 以上的玩家（${clusterStats[seg]?.count?.toLocaleString() || 0} 人）。與另外三群重疊，不是互斥的。`
+                                : `只列 ${seg}（${clusterStats[seg]?.count?.toLocaleString() || 0} 人）`">
                             {{ seg.replace('玩家', '') }}
                         </button>
                     </span>
@@ -1348,7 +1366,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     <div class="flex flex-wrap items-center gap-3 mb-1">
                     <h3 class="text-xl font-bold text-white">
                         逐格明細 ·
-                        <span :class="{'text-indigo-400': cellDetailSeg==='高價值玩家', 'text-cyan-400': cellDetailSeg==='中階玩家', 'text-gray-400': cellDetailSeg==='休閒玩家'}">{{ cellDetailSeg }}</span>
+                        <span :class="{'text-indigo-400': cellDetailSeg==='高價值玩家', 'text-cyan-400': cellDetailSeg==='中階玩家', 'text-gray-400': cellDetailSeg==='休閒玩家', 'text-emerald-400': cellDetailSeg==='全站', 'text-amber-400': cellDetailSeg==='單格大額'}">{{ cellDetailSeg }}</span>
                     </h3>
                         <div class="flex rounded overflow-hidden border border-white/10">
                             <button v-for="v in cellViews" :key="v.k" @click="cellView = v.k"
@@ -1500,7 +1518,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     <div class="flex flex-wrap items-center gap-3 mb-1 pr-10">
                         <h3 class="text-xl font-bold text-white">
                             逐日 RTP 走勢 ·
-                            <span :class="{'text-indigo-400': dailyTrendSeg==='高價值玩家', 'text-cyan-400': dailyTrendSeg==='中階玩家', 'text-gray-400': dailyTrendSeg==='休閒玩家', 'text-emerald-400': dailyTrendSeg==='全站'}">{{ dailyTrendSeg }}</span>
+                            <span :class="{'text-indigo-400': dailyTrendSeg==='高價值玩家', 'text-cyan-400': dailyTrendSeg==='中階玩家', 'text-gray-400': dailyTrendSeg==='休閒玩家', 'text-emerald-400': dailyTrendSeg==='全站', 'text-amber-400': dailyTrendSeg==='單格大額'}">{{ dailyTrendSeg }}</span>
                         </h3>
                         <div class="flex rounded overflow-hidden border border-white/10">
                             <button v-for="v in compSingleViews" :key="v.k" @click="dailyTrendView = v.k"
@@ -2799,6 +2817,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 });
                 const DEFAULT_HIGH_THRESHOLD = 200;
                 const DEFAULT_MID_THRESHOLD = 50;
+                const DEFAULT_BIGCELL_THRESHOLD = 3000;
 
                 // 預設門檻在 v0.92 從 10000/2000 調整為 200/50 (舊值幾乎會把所有玩家歸到休閒)。
                 // 提高版本號可清掉瀏覽器裡存的舊門檻, 讓新預設值生效一次; 之後使用者自己調的值照常保留。
@@ -2815,15 +2834,22 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
 
                 const savedHigh = parseInt(store.get('livemines_high_threshold'));
                 const savedMid = parseInt(store.get('livemines_mid_threshold'));
+                const savedBigCell = parseInt(store.get('livemines_bigcell_threshold'));
 
                 const highValueThreshold = ref(Number.isFinite(savedHigh) && savedHigh > 0 ? savedHigh : DEFAULT_HIGH_THRESHOLD);
                 const midValueThreshold = ref(Number.isFinite(savedMid) && savedMid > 0 ? savedMid : DEFAULT_MID_THRESHOLD);
+                // 單格大額的門檻。允許 0(>= 0 everyone), 所以判斷用 >= 0 而不是 > 0 ——
+                // 前兩個門檻沿用「0 視為沒設定」的舊寫法, 這個不能照抄, 0 是有意義的值。
+                const bigCellThreshold = ref(Number.isFinite(savedBigCell) && savedBigCell >= 0 ? savedBigCell : DEFAULT_BIGCELL_THRESHOLD);
 
                 watch(highValueThreshold, (newVal) => {
                     store.set('livemines_high_threshold', newVal);
                 });
                 watch(midValueThreshold, (newVal) => {
                     store.set('livemines_mid_threshold', newVal);
+                });
+                watch(bigCellThreshold, (newVal) => {
+                    store.set('livemines_bigcell_threshold', newVal);
                 });
 
                 const clusterStats = ref({});
@@ -3406,6 +3432,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     totalTurnover: 0, totalPayout: 0, winLoss: 0, totalGrids: 0,
                     roundsCount: 0, totalHitRounds: 0, totalWinRounds: 0,
                     exbetRounds: 0, exbetBet: 0, exbetRoundBet: 0, exbetRoundPayout: 0,
+                    maxCellBet: 0,   // 此範圍內單一格子押過的最大金額(不含 EXBET)
                     plainRounds: 0, plainRoundBet: 0, plainRoundPayout: 0,
                     // RTP 五項組成, 三種視角各記一份(全體 / 有買 EXBET 的局 / 沒買的局)。
                     // 分開累積而不是事後從全體相減 —— 相減在浮點下會累積誤差, 也看不出哪一邊算錯。
@@ -3422,6 +3449,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     if (r.payout > 0) p.totalHitRounds++;
                     if (r.winLoss > 0) p.totalWinRounds++;
                     if (r.places) for (let i = 0; i < 9; i++) p.placeCounts[i] += r.places[i];
+                    if (r.maxCell > p.maxCellBet) p.maxCellBet = r.maxCell;
 
                     // 有沒有買 EXBET: exbetCount 或 hasExtra 任一成立都算。
                     // 舊匯出檔的 Bet Place 10 那一列可能被分頁 bug 弄丟(實測 9 組), 但 Extra Result
@@ -3756,6 +3784,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                                 exbetWinLoss: 0,
                                                 // RTP 五項組成
                                                 wBase: 0, wFree: 0, wPaid: 0, wJp: 0, wBonus: 0,
+                                                maxCell: 0,
                                                 hasExtra: false,     // 這局有購買閃電的落點紀錄
                                                 // 這一局在 allRounds 裡的位置。逐格金額存在另一組平行陣列裡,
                                                 // 靠這個索引對回來 —— 見 billCell/billBet/billPayout 的註解。
@@ -3766,6 +3795,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                         if (betPlace >= 1 && betPlace <= 9) {
                                             groupedRounds[roundKey].grids += 1;
                                             groupedRounds[roundKey].places[betPlace - 1] += 1;
+                                            // 這一局押在單一格子的最大金額。只看 1~9 ——
+                                            // Bet Place 10 是 EXBET 加購費, 不是押在格子上的錢。
+                                            // 記在局上而不是玩家上, 是因為門檻與時間範圍都可以改,
+                                            // 得先有逐局的值才能在任何範圍下重新聚合。
+                                            if (bet > groupedRounds[roundKey].maxCell) groupedRounds[roundKey].maxCell = bet;
 
                                             // 逐格拆出這一列派彩的組成
                                             const cell = String(betPlace);
@@ -3959,7 +3993,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 const cardMode = ref(store.get('livemines_card_mode') === 'all' ? 'all' : 'seg');
                 watch(cardMode, (v) => store.set('livemines_card_mode', v));
                 const SEGS = ['高價值玩家', '中階玩家', '休閒玩家'];
-                const shownSegments = computed(() => cardMode.value === 'all' ? ['全站'] : SEGS);
+                const BIG_SEG_NAME = '單格大額';
+                const shownSegments = computed(() => cardMode.value === 'all' ? ['全站', BIG_SEG_NAME] : SEGS);
                 // 預設收起。三張卡共用同一個展開狀態 —— 要比較就是一次看三張, 分開展開沒有意義。
                 const compOpen = ref(store.get('livemines_comp_open') === '1');
                 watch(compOpen, (v) => store.set('livemines_comp_open', v ? '1' : '0'));
@@ -4050,7 +4085,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 分群是聚合「之後」才知道的(computeClusters 把 segment 寫回玩家物件), 所以門檻要進 stamp;
                 // dataGen 是為了「重新匯入」也能失效, 少了它會拿舊檔的數字配新檔。
                 const cellStamp = () =>
-                    `${rangeFrom.value}|${rangeTo.value}|${highValueThreshold.value}|${midValueThreshold.value}|${dataGen}`;
+                    `${rangeFrom.value}|${rangeTo.value}|${highValueThreshold.value}|${midValueThreshold.value}|${bigCellThreshold.value}|${dataGen}`;
 
                 const computeCellStats = () => {
                     const rounds = allRounds.value;
@@ -4072,7 +4107,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     let np = 0;
                     Object.values(players).forEach(p => {
                         accIdx.set(p.account, np++);
-                        [p.segment, '全站'].forEach(sg => {
+                        // 單格大額是重疊的第四群 —— 同一位玩家的錢會同時算進他原本的分群、
+                        // 全站、以及(若達門檻)單格大額。全站仍然只等於前三群相加。
+                        const gs = [p.segment, '全站'];
+                        if (p.bigCell) gs.push('單格大額');
+                        gs.forEach(sg => {
                             const s = out[sg] || (out[sg] = mk());
                             s.exbetBet += p.exbetBet;   // 這筆錢無格可歸, 對帳列要用
                         });
@@ -4092,6 +4131,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const rExFee = new Float64Array(n);   // 該局的 EXBET 加購費, 要按格攤回去
                     const rGrid = new Float64Array(n);    // 該局的格注總額(不含加購費), 攤分的分母
                     const rAcc = new Int32Array(n).fill(-1);
+                    const rBig = new Uint8Array(n);       // 這一局的玩家是不是單格大額
                     const full = rangeIsFull.value;
                     for (let i = 0; i < n; i++) {
                         const r = rounds[i];
@@ -4100,6 +4140,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         if (!p || segIdx[p.segment] === undefined) continue;
                         rSeg[i] = segIdx[p.segment];
                         rAcc[i] = accIdx.get(r.account);
+                        rBig[i] = p.bigCell ? 1 : 0;
                         // 判定照抄 addRoundToAgg: 舊匯出檔會掉 Bet Place 10 那一列, 只看 exbetCount
                         // 會把那幾局歸進「沒買」, 明細與卡片就會出現無法解釋的落差。
                         rEx[i] = (r.exbetCount > 0 || r.hasExtra) ? 1 : 0;
@@ -4115,10 +4156,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const sRows = new Int32Array(9);
                     const sBase = new Float64Array(9), sFree = new Float64Array(9);
                     const sPaid = new Float64Array(9), sJp = new Float64Array(9);
-                    let cur = -1, curSeg = -1, curEx = 0, curAcc = -1, curFee = 0, curGrid = 0;
+                    let cur = -1, curSeg = -1, curEx = 0, curAcc = -1, curFee = 0, curGrid = 0, curBig = 0;
                     const flush = () => {
                         if (curSeg < 0) { sBet.fill(0); sPay.fill(0); sRows.fill(0); return; }
-                        const targets = [out[segNames[curSeg]], out['全站']];
+                        const targets = curBig
+                            ? [out[segNames[curSeg]], out['全站'], out['單格大額']]
+                            : [out[segNames[curSeg]], out['全站']];
                         const views = curEx ? [0, 1] : [0, 2];
                         // 這一局的加購費按各格投注比例攤: 每 1 元格注要多負擔 k 元。
                         // 分母用該局自己的格注總額(rGrid), 不用掃描時累到的和 —— 後者只有在
@@ -4145,7 +4188,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     };
                     for (let i = 0; i < nb; i++) {
                         const ri = billRound[i];
-                        if (ri !== cur) { flush(); cur = ri; curSeg = rSeg[ri]; curEx = rEx[ri]; curAcc = rAcc[ri]; curFee = rExFee[ri]; curGrid = rGrid[ri]; }
+                        if (ri !== cur) { flush(); cur = ri; curSeg = rSeg[ri]; curEx = rEx[ri]; curAcc = rAcc[ri]; curFee = rExFee[ri]; curGrid = rGrid[ri]; curBig = rBig[ri]; }
                         if (curSeg < 0) continue;
                         const c = billCell[i] - 1;
                         if (c < 0 || c > 8) continue;
@@ -4317,7 +4360,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     ctx.textBaseline = 'top';
 
                     // 標題。分群顏色照畫面上那組, 三張卡並排時 PM 是靠顏色認群的
-                    const SEG_COLOR = { '高價值玩家': '#818cf8', '中階玩家': '#22d3ee', '休閒玩家': '#9ca3af' };
+                    const SEG_COLOR = { '高價值玩家': '#818cf8', '中階玩家': '#22d3ee', '休閒玩家': '#9ca3af',
+                                        '全站': '#34d399', '單格大額': '#fbbf24' };
                     ctx.font = 'bold 20px ' + FONT;
                     ctx.textAlign = 'left';
                     ctx.fillStyle = '#e2e8f0';
@@ -4470,7 +4514,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 這是 cellStamp 沒有的維度(逐格明細不分日, 換日界不影響它), 漏掉就會拿
                 // 08:00 換日的分桶配 00:00 換日的標籤, 而且沒有任何錯誤訊息。
                 const dailyTrendStamp = () =>
-                    `${rangeFrom.value}|${rangeTo.value}|${highValueThreshold.value}|${midValueThreshold.value}|${dayMode.value}|${dataGen}`;
+                    `${rangeFrom.value}|${rangeTo.value}|${highValueThreshold.value}|${midValueThreshold.value}|${bigCellThreshold.value}|${dayMode.value}|${dataGen}`;
 
                 // 逐日只要五個分子 + 分母, 不帶 bonusLv / bonusReach / bonusBomb 那三條陣列。
                 // 那三條是「二級玩法分層存活率」用的, 逐日走勢不畫它們。
@@ -4492,7 +4536,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     // 跟排行榜的每日欄是同一組日子、同一個順序, 兩邊可以並著看。
                     const days = rangeDays.value;
                     const dayIdx = new Map(); days.forEach((d, i) => dayIdx.set(d, i));
-                    const SEG_KEYS = SEGS.concat(['全站']);
+                    const SEG_KEYS = SEGS.concat(['全站', '單格大額']);
                     const segs = {};
                     SEG_KEYS.forEach(sg => {
                         segs[sg] = {};
@@ -4528,11 +4572,13 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         // 會把那幾局歸進「沒買」卻帶著付費閃電的派彩。
                         const vk = (r.exbetCount > 0 || r.hasExtra) ? 'ex' : 'plain';
                         // 累到自己的分群與「全站」。每位玩家只屬於一個分群, 所以不會重複計數。
-                        const own = segs[p.segment], all = segs['全站'];
+                        const own = segs[p.segment], all = segs['全站'], big = p.bigCell ? segs['單格大額'] : null;
                         bumpDayComp(own.all[di], bet, pay, wb, wf, wp, wj, wn);
                         bumpDayComp(own[vk][di], bet, pay, wb, wf, wp, wj, wn);
                         bumpDayComp(all.all[di], bet, pay, wb, wf, wp, wj, wn);
                         bumpDayComp(all[vk][di], bet, pay, wb, wf, wp, wj, wn);
+                        if (big) { bumpDayComp(big.all[di], bet, pay, wb, wf, wp, wj, wn);
+                                   bumpDayComp(big[vk][di], bet, pay, wb, wf, wp, wj, wn); }
                     }
                     dailyTrend.value = { stamp: dailyTrendStamp(), days, segs, outside };
                 };
@@ -4860,11 +4906,17 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     // 全部不用改就能直接顯示不分群的結果, 也不會有兩套算法各自漂移的風險。
                     // 每位玩家只屬於一個分群, 所以往全站累加不會重複計數。
                     const ALL_SEG = '全站';
+                    // 「單格大額」是獨立的第四群, 跟前三群「重疊」而不是互斥 ——
+                    // 一位大額玩家同時仍屬於他原本的分群, 所以「全站 = 三群相加」這個性質不變,
+                    // 也因此它擺在全站旁邊(兩者都是橫跨所有人的一種看法), 不是排在三群後面。
+                    // 門檻設 0 時它的人數會等於全站, 那正好是這個關係的自我檢查。
+                    const BIG_SEG = '單格大額';
                     const clusters = {
                         '高價值玩家': initStats(),
                         '中階玩家': initStats(),
                         '休閒玩家': initStats(),
-                        [ALL_SEG]: initStats()
+                        [ALL_SEG]: initStats(),
+                        [BIG_SEG]: initStats()
                     };
                     // 每個分群各一份, 不能共用同一個陣列物件(共用的話四個分群會互相累加)
                     const slots = retentionSlots();
@@ -4879,9 +4931,14 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         else if (avgBet >= midValueThreshold.value) segment = '中階玩家';
 
                         p.segment = segment;
+                        // 給排行榜篩選用。門檻或範圍變了就會重算, 所以不需要另外失效。
+                        p.bigCell = (p.maxCellBet || 0) >= bigCellThreshold.value;
                         
-                        // 同時累到自己的分群與「全站」。每位玩家只屬於一個分群, 所以不會重複計數。
-                        [segment, ALL_SEG].forEach(sg => {
+                        // 同時累到自己的分群與「全站」。每位玩家只屬於前三群其中一個, 所以全站不會重複計數。
+                        // 單格大額是額外的一份(重疊), 它不參與「全站 = 三群相加」。
+                        const groups = [segment, ALL_SEG];
+                        if (p.bigCell) groups.push(BIG_SEG);
+                        groups.forEach(sg => {
                             const cl = clusters[sg];
                             cl.count++;
                             cl.turnover += p.totalTurnover;
@@ -5046,7 +5103,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         '高價值玩家': 'rgba(129, 140, 248,',
                         '中階玩家': 'rgba(34, 211, 238,',
                         '休閒玩家': 'rgba(148, 163, 184,',
-                        '全站': 'rgba(52, 211, 153,'
+                        '全站': 'rgba(52, 211, 153,',
+                        '單格大額': 'rgba(251, 191, 36,'
                     };
                     const datasets = (shownSegments.value || []).map(seg => {
                         const cl = (clusterStats.value || {})[seg];
@@ -5975,7 +6033,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     const q = playerSearch.value.trim().toLowerCase();
                     const seg = segmentFilter.value;
                     let arr = sortedPlayers.value;
-                    if (seg) arr = arr.filter(p => p.segment === seg);
+                    // 單格大額不是 p.segment 的值(它跟三群重疊), 要用旗標篩
+                    if (seg === '單格大額') arr = arr.filter(p => p.bigCell);
+                    else if (seg) arr = arr.filter(p => p.segment === seg);
                     if (!q) return arr;
                     return arr.filter(p => {
                         if (String(p.account).toLowerCase().includes(q)) return true;
@@ -6219,7 +6279,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     playerSearch, filteredPlayers, highlightParts,
                     btnBase, nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
                     matchedAlias, placePreference,
-                    highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
+                    highValueThreshold, midValueThreshold, bigCellThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
                     showBetTrendModal, openBetTrend, betTrendMode, betTrendSize, showBonusModal,
                     betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays, playerView, selectedDay,
