@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.78</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.79</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1218,8 +1218,54 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             <span class="text-gray-400">收手 <span class="font-mono text-green-400">{{ playerBonusRuns.filter(r => r.cashedOut).length }}</span></span>
                             <span class="text-gray-400">爆掉 <span class="font-mono text-red-400">{{ playerBonusRuns.filter(r => r.bombed).length }}</span></span>
                             <span class="text-gray-400">最深 <span class="font-mono text-white">{{ Math.max(...playerBonusRuns.map(r => r.steps)) }}</span> 層</span>
-                            <span class="text-gray-400">二級派彩合計
-                                <span class="font-mono text-white">{{ formatMoney(playerBonusRuns.reduce((a, r) => a + r.payout, 0)) }}</span></span>
+                            <span class="text-gray-400 cursor-help"
+                                title="只算二級那一段：該局派彩扣掉一級（三同球本身的賠付與閃電加成）。爆掉的局二級是 0，玩家拿到的是一級的錢。">
+                                二級實得合計
+                                <span class="font-mono text-white">{{ formatMoney(playerBonusRuns.reduce((a, r) => a + r.bonus, 0)) }}</span></span>
+                            <span class="text-gray-500">該局總派彩合計
+                                <span class="font-mono text-gray-400">{{ formatMoney(playerBonusRuns.reduce((a, r) => a + r.payout, 0)) }}</span></span>
+                        </div>
+
+                        <!-- 分層表現。放在逐局清單上面: 先看「大概玩到哪裡、哪一層特別不順」,
+                             再往下看是哪幾局造成的。 -->
+                        <div class="mb-4 bg-slate-900/40 rounded-lg px-4 py-3">
+                            <div class="text-xs font-bold text-gray-300 mb-2">分層表現
+                                <span class="font-normal text-gray-500 ml-2">每層四扇、兩扇是好的，設計上的存活率是 50%</span>
+                            </div>
+                            <table class="w-full text-xs">
+                                <thead><tr class="text-gray-500 text-left border-b border-white/10">
+                                    <th class="py-1">層</th>
+                                    <th class="py-1 text-right">到過</th>
+                                    <th class="py-1 text-right">選中</th>
+                                    <th class="py-1 text-right">爆掉</th>
+                                    <th class="py-1 text-right">在此收手</th>
+                                    <th class="py-1 text-right">存活率</th>
+                                    <th class="py-1 text-right">vs 50%</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="r in playerBonusLevels" :key="r.lv" class="border-b border-white/5"
+                                        :class="r.reach ? '' : 'opacity-40'">
+                                        <td class="py-1 text-gray-300">L{{ r.lv }}</td>
+                                        <td class="py-1 text-right font-mono text-gray-300">{{ r.reach }}</td>
+                                        <td class="py-1 text-right font-mono text-green-400">{{ r.pass }}</td>
+                                        <td class="py-1 text-right font-mono text-red-400">{{ r.bomb }}</td>
+                                        <td class="py-1 text-right font-mono text-gray-400">{{ r.cash }}</td>
+                                        <td class="py-1 text-right font-mono"
+                                            :class="r.survival === null ? 'text-gray-600' : (r.solid ? 'text-white' : 'text-white/50')">
+                                            {{ r.survival === null ? '—' : r.survival.toFixed(1) + '%' }}
+                                        </td>
+                                        <td class="py-1 text-right font-mono"
+                                            :class="r.survival === null ? 'text-gray-600' : (r.survival >= 50 ? 'text-green-400' : 'text-red-400')">
+                                            {{ r.survival === null ? '' : (r.survival - 50 >= 0 ? '+' : '') + (r.survival - 50).toFixed(1) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p class="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                                「選中」＝那一層選對了（之後繼續往上或就此收手），「爆掉」＝選錯結束。存活率＝選中／到過。<br>
+                                <span class="text-white/50">半透明的存活率</span>代表到過次數不足 20 次 —— 單一玩家在深層的樣本本來就少，
+                                20 次的誤差仍有 ±20pp 上下，只能當粗略指標，不要拿來斷定機率有問題。
+                            </p>
                         </div>
 
                         <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
@@ -1236,6 +1282,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     <span class="text-xs">
                                         <span class="text-gray-500">投注 <span class="font-mono text-gray-300">{{ formatMoney(r.bet) }}</span></span>
                                         <span class="text-gray-500 ml-3">派彩 <span class="font-mono text-white">{{ formatMoney(r.payout) }}</span></span>
+                                        <span class="text-gray-500 ml-3 cursor-help"
+                                            :title="`該局派彩 ${formatMoney(r.payout)} 之中，一級（三同球本身＋閃電加成）${formatMoney(r.base)}、二級 ${formatMoney(r.bonus)}`">
+                                            其中二級 <span class="font-mono" :class="r.bonus > 0 ? 'text-pink-300' : 'text-gray-600'">{{ formatMoney(r.bonus) }}</span></span>
                                         <span class="text-gray-500 ml-3">倍率 <span class="font-mono text-amber-300">{{ r.mult }}×</span></span>
                                     </span>
                                 </div>
@@ -1264,8 +1313,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         </div>
 
                         <p class="text-[11px] text-gray-500 mt-4 leading-relaxed">
-                            「選」後面的數字是玩家在那一層點了第幾扇（1~4）。爆掉那一步仍然有派彩 —— 三同球本身的一級賠付已經先給了，二級是在那之上再往上疊。<br>
-                            倍率是該局的總倍率（派彩 ÷ 投注），已含一級的部分，不是二級單獨的倍數。
+                            「選」後面的數字是玩家在那一層點了第幾扇（1~4）。<br>
+                            爆掉的局<span class="text-gray-300">二級是 0</span>，但該局仍有派彩 —— 那是三同球本身的一級賠付（含閃電加成），二級是在那之上再往上疊的部分。<br>
+                            倍率是該局的總倍率（派彩 ÷ 投注），已含一級，不是二級單獨的倍數。
                         </p>
                     </template>
                 </div>
@@ -1519,7 +1569,8 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         <thead>
                             <tr class="text-gray-500 text-left border-b border-white/10">
                                 <th class="py-2 w-8"></th>
-                                <th class="py-2">最後使用時間</th>
+                                <th class="py-2">開始使用</th>
+                                <th class="py-2">最後使用</th>
                                 <th class="py-2">暱稱</th>
                             </tr>
                         </thead>
@@ -1527,6 +1578,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             <tr v-for="(n, i) in nicknameEntriesOf(selectedPlayer)" :key="n.name + i"
                                 class="border-b border-white/5">
                                 <td class="py-2 text-[10px] text-gray-600">{{ i + 1 }}</td>
+                                <!-- 沒有 first 就留空(不是「—」): 空白讀起來是「這欄沒資料」,
+                                     破折號容易被當成某種不存在的狀態。 -->
+                                <td class="py-2 font-mono text-xs text-gray-500">{{ n.first ? nickTime(n.first) : '' }}</td>
                                 <td class="py-2 font-mono text-xs" :class="i === 0 ? 'text-gray-300' : 'text-gray-500'">
                                     {{ n.last ? nickTime(n.last) : '—' }}
                                 </td>
@@ -1538,8 +1592,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         </tbody>
                     </table>
                     <p class="text-[10px] text-gray-500 mt-4 leading-relaxed">
-                        時間是該暱稱最後一次被使用的時刻，取自暱稱對照檔。沒有時間的項目來自舊格式的對照檔，
-                        當時只記錄名稱、沒有記錄時間。
+                        時間取自暱稱對照檔。「開始使用」不是每一筆都有 —— 在對照檔開始記錄它之前就存在的名字會留空，
+                        那不代表沒有使用期間，只是沒被記下來。<br>
+                        完全沒有時間的項目來自更早的舊格式對照檔，當時只記錄名稱。
                     </p>
                 </div>
             </div>
@@ -3199,6 +3254,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 //
                 // v2 起每筆是 { name, last }, last 是最後使用時間(Unix 秒)。有了它就能明確判斷
                 // 哪個是現用名, 不必再靠陣列順序猜。仍相容 v1 的純字串格式(那時只能用順序)。
+                // 對照檔後來又補上 first(開始使用時間), 但不是每一筆都有 —— 實測約三分之二有,
+                // 其餘是在開始記錄 first 之前就存在的名字。沒有就留空, 不要拿 last 去頂替:
+                // 那會讓「只用過一天」跟「用了三個月」看起來一模一樣。
                 const parseNicknameFile = (text) => {
                     const json = JSON.parse(text);
                     const users = json && json.users ? json.users : json;
@@ -3207,8 +3265,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         const v = users[key];
                         const list = (Array.isArray(v) ? v : [v])
                             .map(x => (x && typeof x === 'object')
-                                ? { name: String(x.name == null ? '' : x.name), last: typeof x.last === 'number' ? x.last : null }
-                                : { name: String(x == null ? '' : x), last: null })
+                                ? { name: String(x.name == null ? '' : x.name),
+                                    last: typeof x.last === 'number' ? x.last : null,
+                                    first: typeof x.first === 'number' ? x.first : null }
+                                : { name: String(x == null ? '' : x), last: null, first: null })
                             .filter(x => x.name);
                         // 自己排一次, 不依賴檔案本身的順序 —— 沒有時間戳的(v1)維持原順序
                         if (list.some(x => x.last !== null)) {
@@ -3233,10 +3293,15 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         if (!r.bg) return;
                         const seq = r.bg.seq || [];
                         const last = seq.length ? seq[seq.length - 1].o : '';
+                        // 二級實得要用殘差 wBonus, 不是該局總派彩 —— payout 含一級(三同球本身的賠付
+                        // 與閃電加成), 爆掉的那幾局玩家其實只拿到一級的錢, 用 payout 會把它算成二級收益。
+                        // wBonus 是解析時算好的 payout −(一級+免費閃電+付費閃電+JP), 正是二級那一段。
+                        const bonusOnly = r.wBonus || 0;
                         out.push({
                             wall: r.wallTime, code: r.gameCode,
                             cell: r.bg.cell, result: r.bg.result,
                             bet: r.bg.bet, payout: r.bg.payout, mult: r.bg.mult,
+                            bonus: bonusOnly, base: r.bg.payout - bonusOnly,
                             steps: seq.length, ended: last, seq,
                             // 收手 = 自己決定停; 爆掉 = 被結束。Continue 收尾代表資料只記到這裡。
                             cashedOut: last === 'CashOut', bombed: last === 'Bomb',
@@ -3244,6 +3309,31 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         });
                     });
                     return out.sort((a, b) => (a.wall < b.wall ? 1 : a.wall > b.wall ? -1 : 0));
+                });
+
+                // 這位玩家的分層表現: 到過每一層幾次、在那一層選中/爆掉/收手幾次。
+                // 每一層四扇、其中兩扇是好的, 所以設計上的存活率是 50% —— 表上直接跟它比,
+                // 才看得出「是不是在某一層爆得特別慘」。
+                // CashOut 也算「選中」: 資料裡收手那一步一樣記著他選的那一扇, 代表先選對了才收手。
+                const playerBonusLevels = computed(() => {
+                    const runs = playerBonusRuns.value;
+                    const rows = [];
+                    for (let L = 1; L <= 5; L++) {
+                        let reach = 0, pass = 0, cash = 0, bomb = 0;
+                        runs.forEach(r => {
+                            const st = r.seq[L - 1];
+                            if (!st) return;
+                            reach++;
+                            if (st.o === 'Bomb') bomb++;
+                            else { pass++; if (st.o === 'CashOut') cash++; }
+                        });
+                        rows.push({ lv: L, reach, pass, cash, bomb,
+                            survival: reach > 0 ? pass / reach * 100 : null,
+                            // 樣本太小的話這個百分比是雜訊。門檻不用分群卡片那個 200 ——
+                            // 單一玩家不可能有那種量; 20 次的誤差仍有 ±20pp 上下, 只能當粗略指標。
+                            solid: reach >= 20 });
+                    }
+                    return rows;
                 });
 
                 // 玩家統計的聚合器。全站重算與「只看某一天」共用同一份邏輯 ——
@@ -5806,8 +5896,18 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
                 };
                 // 給 tooltip 用: 每個名字配上最後使用時間
+                // 有 first 就顯示區間, 只有 last 就顯示單一時點 —— 不要把沒有 first 的補成
+                // 「last ~ last」, 那會謊稱這個名字只用過一瞬間。
+                const nickSpan = (x) => {
+                    if (x.first && x.last) return nickTime(x.first) + ' ~ ' + nickTime(x.last);
+                    if (x.last) return '最後使用 ' + nickTime(x.last);
+                    return '';
+                };
                 const nicknameHistory = (player) => nicknameEntriesOf(player)
-                    .map((x, i) => `${i === 0 ? '現用' : '曾用'}　${x.name}${x.last ? '　(最後使用 ' + nickTime(x.last) + ')' : ''}`)
+                    .map((x, i) => {
+                        const sp = nickSpan(x);
+                        return `${i === 0 ? '現用' : '曾用'}　${x.name}${sp ? '　(' + sp + ')' : ''}`;
+                    })
                     .join('\n');
 
                 // 沒有暱稱時給一個固定的佔位字, 而不是把帳號塞進暱稱的位置 ——
@@ -6076,7 +6176,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dismissedNotices, dismissNotice,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16, openRangePicker,
-                    playerBonusRuns,
+                    playerBonusRuns, playerBonusLevels,
                     shiftWindow, canShift, snapToWholeDays,
                     isPartialDay, dayWindowOf, dayCoveredFully, hasPartialDay, rangeTextShort, ballGranDisabled,
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
