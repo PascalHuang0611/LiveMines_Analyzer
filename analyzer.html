@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.80</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.81</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1015,32 +1015,35 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     </div>
                     </div>
 
-                    <!-- 四顆按鈕獨立一排: 塞在統計格子裡會把整列的高度撐起來。
-                         左邊是「開圖看」, 右邊是「拿資料走」, 分兩群比較好認。 -->
+                    <!-- 五顆按鈕獨立一排: 塞在統計格子裡會把整列的高度撐起來。
+                         左邊是「開圖看」, 右邊是「拿資料走」, 分兩群比較好認。
+                         五顆共用同一組尺寸類別(btnBase): 原本匯出那兩顆是 text-xs px-3、
+                         其餘是 text-sm px-4, 而且只有一顆有 border —— 邊框會多佔 2px 高,
+                         所以連高度都不一樣。差異只留在顏色, 尺寸一律相同。
+                         min-w 是為了讓「匯出彙總」這種四個字的鈕不會比六個字的明顯縮水。 -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <button @click="openChart"
-                            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-bold transition-colors">
+                        <button @click="openChart" :class="btnBase"
+                            class="bg-indigo-600 hover:bg-indigo-500 border-indigo-500">
                             查看歷程圖表
                         </button>
-                        <button @click="openBetTrend"
-                            class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded text-sm font-bold transition-colors">
+                        <button @click="openBetTrend" :class="btnBase"
+                            class="bg-white/10 hover:bg-white/20 border-white/10">
                             押注行為變化
                         </button>
                         <button @click="showBonusModal = true" :disabled="!playerBonusRuns.length"
-                            :class="playerBonusRuns.length ? 'bg-pink-600/30 hover:bg-pink-600/50 border-pink-400/40 text-white' : 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed'"
-                            class="px-4 py-2 border rounded text-sm font-bold transition-colors"
+                            :class="[btnBase, playerBonusRuns.length ? 'bg-pink-600/30 hover:bg-pink-600/50 border-pink-400/40 text-white' : 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed']"
                             :title="playerBonusRuns.length ? `逐局看這位玩家進二級之後每一層選了哪一扇` : '此範圍內這位玩家沒有進過二級'">
                             二級玩法回顧
                             <span class="font-normal opacity-80">{{ playerBonusRuns.length }}</span>
                         </button>
-                        <div class="flex gap-2 sm:ml-auto">
-                            <button @click="exportSummary"
-                                class="px-3 py-2 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-xs font-bold transition-colors"
+                        <div class="flex flex-wrap gap-2 sm:ml-auto">
+                            <button @click="exportSummary" :class="btnBase"
+                                class="bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
                                 :title="`匯出彙總 CSV：摘要、每日明細、格位偏好、格數分布${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
                                 匯出彙總
                             </button>
-                            <button @click="exportRounds"
-                                class="px-3 py-2 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-xs font-bold transition-colors"
+                            <button @click="exportRounds" :class="btnBase"
+                                class="bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
                                 :title="`匯出每局明細 CSV：一列一局，共 ${playerView.roundsCount.toLocaleString()} 列${selectedDay ? '（只含 ' + selectedDay + '）' : ''}`">
                                 匯出明細
                             </button>
@@ -2851,6 +2854,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 const showBonusModal = ref(false);  // 單一玩家的二級玩法回顧
                 const showRtpTargetAll = ref(false);  // 拉高 RTP 的局: 展開全部
                 const NICK_PREVIEW = 7;               // 標題列最多先列幾個暱稱
+                // 玩家彈窗那一排按鈕的共用尺寸。每顆都帶 border(即使同色), 否則有邊框的那顆
+                // 會比別人高 2px —— 五顆並排時看得出來。
+                const btnBase = 'px-4 py-2 rounded border text-sm font-bold transition-colors min-w-[7.25rem]';
                 // 顆粒度記住上次的選擇 —— 每次開圖都要重設很煩
                 const savedTrendMode = store.get('livemines_trend_mode');
                 const savedTrendSize = parseInt(store.get('livemines_trend_size'));
@@ -6211,7 +6217,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     handleFileSelect, gridsBetDist, getHeatCount, heatCellOf, heatTotalOf,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
-                    nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
+                    btnBase, nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
                     matchedAlias, placePreference,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
