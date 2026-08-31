@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.79</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.80</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1226,50 +1226,20 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <span class="font-mono text-gray-400">{{ formatMoney(playerBonusRuns.reduce((a, r) => a + r.payout, 0)) }}</span></span>
                         </div>
 
-                        <!-- 分層表現。放在逐局清單上面: 先看「大概玩到哪裡、哪一層特別不順」,
-                             再往下看是哪幾局造成的。 -->
-                        <div class="mb-4 bg-slate-900/40 rounded-lg px-4 py-3">
-                            <div class="text-xs font-bold text-gray-300 mb-2">分層表現
-                                <span class="font-normal text-gray-500 ml-2">每層四扇、兩扇是好的，設計上的存活率是 50%</span>
+                    <!-- 逐局清單在左、分層卡片在右。分層固定五層, 直排剛好, 也不會像橫躺的
+                         表格那樣把整個彈窗拉長。點卡片會把左邊篩成「結束在那一層」的那幾局。 -->
+                    <div class="flex flex-col md:flex-row gap-4 items-start">
+                        <div class="flex-1 min-w-0 w-full">
+                            <div v-if="bonusLevelFilter" class="mb-2 text-[11px] text-pink-300 flex items-center gap-2">
+                                <span>只顯示結束在第 {{ bonusLevelFilter }} 層的 {{ bonusRunsShown.length }} 局</span>
+                                <button @click="bonusLevelFilter = null"
+                                    class="text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 rounded px-1.5 py-px transition-colors">看全部</button>
                             </div>
-                            <table class="w-full text-xs">
-                                <thead><tr class="text-gray-500 text-left border-b border-white/10">
-                                    <th class="py-1">層</th>
-                                    <th class="py-1 text-right">到過</th>
-                                    <th class="py-1 text-right">選中</th>
-                                    <th class="py-1 text-right">爆掉</th>
-                                    <th class="py-1 text-right">在此收手</th>
-                                    <th class="py-1 text-right">存活率</th>
-                                    <th class="py-1 text-right">vs 50%</th>
-                                </tr></thead>
-                                <tbody>
-                                    <tr v-for="r in playerBonusLevels" :key="r.lv" class="border-b border-white/5"
-                                        :class="r.reach ? '' : 'opacity-40'">
-                                        <td class="py-1 text-gray-300">L{{ r.lv }}</td>
-                                        <td class="py-1 text-right font-mono text-gray-300">{{ r.reach }}</td>
-                                        <td class="py-1 text-right font-mono text-green-400">{{ r.pass }}</td>
-                                        <td class="py-1 text-right font-mono text-red-400">{{ r.bomb }}</td>
-                                        <td class="py-1 text-right font-mono text-gray-400">{{ r.cash }}</td>
-                                        <td class="py-1 text-right font-mono"
-                                            :class="r.survival === null ? 'text-gray-600' : (r.solid ? 'text-white' : 'text-white/50')">
-                                            {{ r.survival === null ? '—' : r.survival.toFixed(1) + '%' }}
-                                        </td>
-                                        <td class="py-1 text-right font-mono"
-                                            :class="r.survival === null ? 'text-gray-600' : (r.survival >= 50 ? 'text-green-400' : 'text-red-400')">
-                                            {{ r.survival === null ? '' : (r.survival - 50 >= 0 ? '+' : '') + (r.survival - 50).toFixed(1) }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <p class="text-[10px] text-gray-500 mt-2 leading-relaxed">
-                                「選中」＝那一層選對了（之後繼續往上或就此收手），「爆掉」＝選錯結束。存活率＝選中／到過。<br>
-                                <span class="text-white/50">半透明的存活率</span>代表到過次數不足 20 次 —— 單一玩家在深層的樣本本來就少，
-                                20 次的誤差仍有 ±20pp 上下，只能當粗略指標，不要拿來斷定機率有問題。
-                            </p>
-                        </div>
-
-                        <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-                            <div v-for="(r, ri) in playerBonusRuns" :key="r.code + '_' + ri"
+                            <div v-if="!bonusRunsShown.length" class="text-xs text-gray-500 py-8 text-center">
+                                沒有結束在這一層的局。
+                            </div>
+                            <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                            <div v-for="(r, ri) in bonusRunsShown" :key="r.code + '_' + ri"
                                 class="bg-slate-800/60 rounded-xl px-4 py-3 border border-white/5">
                                 <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
                                     <span class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -1310,7 +1280,50 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     </span>
                                 </div>
                             </div>
+                            </div>
                         </div>
+
+                        <!-- 右側: 五層固定卡片。每層四扇、兩扇是好的, 設計上的存活率就是 50%,
+                             卡片直接把差距標出來, 才看得出「有沒有在某一層爆得特別慘」。 -->
+                        <div class="w-full md:w-48 shrink-0">
+                            <div class="text-xs font-bold text-gray-300 mb-2 flex items-baseline justify-between">
+                                <span>分層表現</span>
+                                <span class="text-[10px] font-normal text-gray-500">基準 50%</span>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div v-for="r in playerBonusLevels" :key="r.lv"
+                                    @click="r.ended ? (bonusLevelFilter = bonusLevelFilter === r.lv ? null : r.lv) : null"
+                                    class="rounded-lg px-3 py-2 border transition-colors"
+                                    :class="[ r.ended ? 'cursor-pointer hover:border-white/25' : 'opacity-50',
+                                              bonusLevelFilter === r.lv ? 'border-pink-400/60 bg-pink-500/10' : 'border-white/10 bg-slate-800/60' ]"
+                                    :title="r.ended ? `點一下只看結束在第 ${r.lv} 層的 ${r.ended} 局` : '沒有局結束在這一層'">
+                                    <div class="flex items-baseline justify-between">
+                                        <span class="text-sm font-bold text-gray-200">L{{ r.lv }}</span>
+                                        <span class="font-mono text-sm"
+                                            :class="r.survival === null ? 'text-gray-600' : (r.solid ? 'text-white' : 'text-white/50')">
+                                            {{ r.survival === null ? '—' : r.survival.toFixed(0) + '%' }}
+                                            <span v-if="r.survival !== null" class="text-[10px]"
+                                                :class="r.survival >= 50 ? 'text-green-400' : 'text-red-400'">
+                                                {{ (r.survival - 50 >= 0 ? '+' : '') + (r.survival - 50).toFixed(0) }}
+                                            </span>
+                                        </span>
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 mt-0.5 flex flex-wrap gap-x-2">
+                                        <span>到過 <span class="font-mono text-gray-400">{{ r.reach }}</span></span>
+                                        <span>爆 <span class="font-mono text-red-400/80">{{ r.bomb }}</span></span>
+                                        <span v-if="r.cash">收手 <span class="font-mono text-green-400/80">{{ r.cash }}</span></span>
+                                    </div>
+                                    <div class="text-[10px] mt-0.5" :class="r.ended ? 'text-pink-300/80' : 'text-gray-600'">
+                                        結束於此 <span class="font-mono">{{ r.ended }}</span> 局
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-gray-500 mt-2 leading-relaxed">
+                                存活率＝那一層選對的比例（含選對後收手）。<span class="text-white/50">半透明</span>代表到過不足 20 次，
+                                誤差還有 ±20pp 上下，只能當粗略指標。
+                            </p>
+                        </div>
+                    </div>
 
                         <p class="text-[11px] text-gray-500 mt-4 leading-relaxed">
                             「選」後面的數字是玩家在那一層點了第幾扇（1~4）。<br>
@@ -3315,6 +3328,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // 每一層四扇、其中兩扇是好的, 所以設計上的存活率是 50% —— 表上直接跟它比,
                 // 才看得出「是不是在某一層爆得特別慘」。
                 // CashOut 也算「選中」: 資料裡收手那一步一樣記著他選的那一扇, 代表先選對了才收手。
+                // 點分層卡片會把下面的逐局清單篩成「結束在那一層」的。null = 不篩。
+                // 換玩家或關掉彈窗時要清掉, 否則下一位玩家會莫名其妙只看到一部分。
+                const bonusLevelFilter = ref(null);
+                watch([selectedPlayer, showBonusModal], () => { bonusLevelFilter.value = null; });
+
                 const playerBonusLevels = computed(() => {
                     const runs = playerBonusRuns.value;
                     const rows = [];
@@ -3327,13 +3345,21 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             if (st.o === 'Bomb') bomb++;
                             else { pass++; if (st.o === 'CashOut') cash++; }
                         });
-                        rows.push({ lv: L, reach, pass, cash, bomb,
+                        // 「結束於此層」跟「到過此層」是兩件事: 到過 L 的人可能繼續往上,
+                        // 結束在 L 的才是點下去要篩出來的那幾局。
+                        const ended = runs.filter(r => r.steps === L).length;
+                        rows.push({ lv: L, reach, pass, cash, bomb, ended,
                             survival: reach > 0 ? pass / reach * 100 : null,
                             // 樣本太小的話這個百分比是雜訊。門檻不用分群卡片那個 200 ——
                             // 單一玩家不可能有那種量; 20 次的誤差仍有 ±20pp 上下, 只能當粗略指標。
                             solid: reach >= 20 });
                     }
                     return rows;
+                });
+
+                const bonusRunsShown = computed(() => {
+                    const f = bonusLevelFilter.value;
+                    return f ? playerBonusRuns.value.filter(r => r.steps === f) : playerBonusRuns.value;
                 });
 
                 // 玩家統計的聚合器。全站重算與「只看某一天」共用同一份邏輯 ——
@@ -6176,7 +6202,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dismissedNotices, dismissNotice,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16, openRangePicker,
-                    playerBonusRuns, playerBonusLevels,
+                    playerBonusRuns, playerBonusLevels, bonusLevelFilter, bonusRunsShown,
                     shiftWindow, canShift, snapToWholeDays,
                     isPartialDay, dayWindowOf, dayCoveredFully, hasPartialDay, rangeTextShort, ballGranDisabled,
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
