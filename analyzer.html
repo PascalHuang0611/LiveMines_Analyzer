@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.77</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.78</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1026,6 +1026,13 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded text-sm font-bold transition-colors">
                             押注行為變化
                         </button>
+                        <button @click="showBonusModal = true" :disabled="!playerBonusRuns.length"
+                            :class="playerBonusRuns.length ? 'bg-pink-600/30 hover:bg-pink-600/50 border-pink-400/40 text-white' : 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed'"
+                            class="px-4 py-2 border rounded text-sm font-bold transition-colors"
+                            :title="playerBonusRuns.length ? `逐局看這位玩家進二級之後每一層選了哪一扇` : '此範圍內這位玩家沒有進過二級'">
+                            二級玩法回顧
+                            <span class="font-normal opacity-80">{{ playerBonusRuns.length }}</span>
+                        </button>
                         <div class="flex gap-2 sm:ml-auto">
                             <button @click="exportSummary"
                                 class="px-3 py-2 bg-emerald-700/40 hover:bg-emerald-600/50 border border-emerald-500/30 rounded text-xs font-bold transition-colors"
@@ -1182,6 +1189,88 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
         </div>
 
 
+
+        <!-- 二級玩法回顧: 這位玩家進過二級的每一局, 逐層列出他選了哪一扇、結果如何。
+             資料全部來自注單自己的欄位(BGLevel1~5 / Multiplier), 不碰 game_results。 -->
+        <div v-if="showBonusModal && selectedPlayer" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[70] flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+            <div class="glass rounded-2xl w-full max-w-[980px] my-auto relative">
+                <button @click="showBonusModal = false"
+                    class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-10">✕</button>
+
+                <div class="px-6 py-4 border-b border-white/10 pr-12">
+                    <h3 class="text-xl font-bold text-white">
+                        二級玩法回顧 · <span class="text-pink-300">{{ displayName(selectedPlayer) }}</span>
+                    </h3>
+                    <p class="text-xs text-gray-500 mt-1">
+                        三顆球落在同一格（三同球）才會進二級。進去之後每一層有四扇可選，選中就能往上爬或收手，選錯就結束。
+                        <span class="text-gray-300">這裡列出他每一次進二級時，每一層選了第幾扇。</span><br>
+                        <span class="text-gray-600">注單只記「他選的那一扇中不中」，沒有其他三扇的揭曉，所以看不到「沒選的那幾扇是什麼」。</span>
+                    </p>
+                </div>
+
+                <div class="p-6">
+                    <div v-if="!playerBonusRuns.length" class="text-xs text-gray-500 py-12 text-center">
+                        此範圍內這位玩家沒有進過二級。
+                    </div>
+                    <template v-else>
+                        <div class="mb-4 text-xs bg-slate-900/60 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1">
+                            <span class="text-gray-400">進二級 <span class="font-mono text-white">{{ playerBonusRuns.length }}</span> 次</span>
+                            <span class="text-gray-400">收手 <span class="font-mono text-green-400">{{ playerBonusRuns.filter(r => r.cashedOut).length }}</span></span>
+                            <span class="text-gray-400">爆掉 <span class="font-mono text-red-400">{{ playerBonusRuns.filter(r => r.bombed).length }}</span></span>
+                            <span class="text-gray-400">最深 <span class="font-mono text-white">{{ Math.max(...playerBonusRuns.map(r => r.steps)) }}</span> 層</span>
+                            <span class="text-gray-400">二級派彩合計
+                                <span class="font-mono text-white">{{ formatMoney(playerBonusRuns.reduce((a, r) => a + r.payout, 0)) }}</span></span>
+                        </div>
+
+                        <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                            <div v-for="(r, ri) in playerBonusRuns" :key="r.code + '_' + ri"
+                                class="bg-slate-800/60 rounded-xl px-4 py-3 border border-white/5">
+                                <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
+                                    <span class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                        <span class="font-mono text-xs text-gray-400">{{ r.wall }}</span>
+                                        <span class="text-[11px] text-gray-500">押第 <span class="text-gray-300">{{ r.cell }}</span> 格</span>
+                                        <span class="text-[11px] text-gray-500">賽果 <span class="font-mono text-gray-300">{{ r.result }}</span></span>
+                                        <span v-if="r.auto" class="text-[10px] text-sky-300 border border-sky-400/40 rounded px-1"
+                                            title="這一局有用自動模式闖關">自動</span>
+                                    </span>
+                                    <span class="text-xs">
+                                        <span class="text-gray-500">投注 <span class="font-mono text-gray-300">{{ formatMoney(r.bet) }}</span></span>
+                                        <span class="text-gray-500 ml-3">派彩 <span class="font-mono text-white">{{ formatMoney(r.payout) }}</span></span>
+                                        <span class="text-gray-500 ml-3">倍率 <span class="font-mono text-amber-300">{{ r.mult }}×</span></span>
+                                    </span>
+                                </div>
+                                <!-- 一層一格, 由左到右就是闖關順序。標的是「他選的那一扇」, 顏色是那一步的結果。 -->
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <template v-for="(st, si) in r.seq" :key="si">
+                                        <span v-if="si > 0" class="text-gray-600 text-xs">→</span>
+                                        <span class="flex items-center gap-1.5 rounded px-2 py-1 border text-xs"
+                                            :class="st.o === 'Bomb' ? 'border-red-400/40 bg-red-500/10'
+                                                : st.o === 'CashOut' ? 'border-green-400/40 bg-green-500/10'
+                                                : 'border-white/10 bg-white/5'">
+                                            <span class="text-[10px] text-gray-500">L{{ si + 1 }}</span>
+                                            <span class="text-gray-400">選</span>
+                                            <span class="font-mono font-bold text-white">{{ st.p || '?' }}</span>
+                                            <span :class="st.o === 'Bomb' ? 'text-red-400' : st.o === 'CashOut' ? 'text-green-400' : 'text-gray-400'">
+                                                {{ st.o === 'Bomb' ? '爆' : st.o === 'CashOut' ? '收手' : '過關' }}
+                                            </span>
+                                        </span>
+                                    </template>
+                                    <span class="text-[11px] ml-1"
+                                        :class="r.bombed ? 'text-red-400' : (r.cashedOut ? 'text-green-400' : 'text-gray-500')">
+                                        {{ r.bombed ? '第 ' + r.steps + ' 層爆掉' : (r.cashedOut ? '第 ' + r.steps + ' 層收手' : '記錄止於第 ' + r.steps + ' 層') }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="text-[11px] text-gray-500 mt-4 leading-relaxed">
+                            「選」後面的數字是玩家在那一層點了第幾扇（1~4）。爆掉那一步仍然有派彩 —— 三同球本身的一級賠付已經先給了，二級是在那之上再往上疊。<br>
+                            倍率是該局的總倍率（派彩 ÷ 投注），已含一級的部分，不是二級單獨的倍數。
+                        </p>
+                    </template>
+                </div>
+            </div>
+        </div>
 
         <!-- 盤面押注偏好的逐格明細。九宮格照盤面排列, 每一格是該分群在該格位的獨立統計 -->
         <div v-if="cellDetailSeg" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
@@ -2691,6 +2780,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 const cellDetailSeg = ref(null);
                 // 逐日 RTP 走勢。同樣存分群名稱而不是布林 —— 一次只看一群, 而且要知道是哪一群。
                 const dailyTrendSeg = ref(null);
+                const showBonusModal = ref(false);  // 單一玩家的二級玩法回顧
                 const showRtpTargetAll = ref(false);  // 拉高 RTP 的局: 展開全部
                 const NICK_PREVIEW = 7;               // 標題列最多先列幾個暱稱
                 // 顆粒度記住上次的選擇 —— 每次開圖都要重設很煩
@@ -3051,7 +3141,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 // (來源陣列、解構參數、if 條件), 漏改任一處就失效; 改成 some(Boolean) 只剩一處要維護。
                 // 實際上就漏過一次: 逐格明細的 cellDetailSeg 加進來之前, 開著它捲動並沒有被鎖住。
                 const MODAL_FLAGS = [selectedPlayer, showChartModal, showBetTrendModal,
-                    showHeatmapModal, showNicknameModal, cellDetailSeg, dailyTrendSeg];
+                    showHeatmapModal, showNicknameModal, cellDetailSeg, dailyTrendSeg, showBonusModal];
                 watch(MODAL_FLAGS, (vals) => {
                     document.body.style.overflow = vals.some(Boolean) ? 'hidden' : '';
                 });
@@ -3131,6 +3221,31 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
 
                 // (以下是聚合器本身; 真正的重聚合入口是 rebuildFromRounds, 而它自 v1.51 起是延後執行的
                 //  —— 沒人在看玩家分頁時只標記 playerStale, 有人在看也要等 200ms, 見那裡的註解。)
+                // 這位玩家在此範圍內進過二級的每一局, 由新到舊。
+                // 資料全部來自注單自己的欄位(BGLevel1~5 / Multiplier), 不需要 game_results。
+                // 「出了哪幾扇」不在資料裡 —— 注單只記玩家選的那一扇中不中, 沒有其他三扇的揭曉,
+                // 所以畫面只能標「你選的這扇」, 這一點有寫在區塊的說明裡。
+                const playerBonusRuns = computed(() => {
+                    const p = selectedPlayer.value;
+                    if (!p || !p.rounds) return [];
+                    const out = [];
+                    p.rounds.forEach(r => {
+                        if (!r.bg) return;
+                        const seq = r.bg.seq || [];
+                        const last = seq.length ? seq[seq.length - 1].o : '';
+                        out.push({
+                            wall: r.wallTime, code: r.gameCode,
+                            cell: r.bg.cell, result: r.bg.result,
+                            bet: r.bg.bet, payout: r.bg.payout, mult: r.bg.mult,
+                            steps: seq.length, ended: last, seq,
+                            // 收手 = 自己決定停; 爆掉 = 被結束。Continue 收尾代表資料只記到這裡。
+                            cashedOut: last === 'CashOut', bombed: last === 'Bomb',
+                            auto: seq.some(x => x.m === 'Auto')
+                        });
+                    });
+                    return out.sort((a, b) => (a.wall < b.wall ? 1 : a.wall > b.wall ? -1 : 0));
+                });
+
                 // 玩家統計的聚合器。全站重算與「只看某一天」共用同一份邏輯 ——
                 // 兩邊各寫一次的話, 遲早會有一邊改到、另一邊沒改。
                 // 一份組成: 分母(投注)與五個分子
@@ -3552,16 +3667,31 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                                 g.wBonusLv[bonusLevelOf(bet > 0 ? resid / bet : 0)] += resid;
                                                 // 闖關過程: BGLevel 有幾欄非空就是嘗試到第幾層, 最後一欄的結果決定是爆掉還是收手。
                                                 // 存活率的分母是「到過這層的人」, 所以到過的每一層都要記, 不只記結束的那一層。
+                                                // BGLevelN 的格式是 "Manual,<選擇>,<結果>" —— 中間那個數字是
+                                                // 玩家在那一層選了第幾扇(1~4), 結果是 Continue / CashOut / Bomb。
+                                                // 原本只取層數與最後結果, 選擇整個丟掉; 單一玩家歷程要看的正是它。
+                                                // 只有真的進二級才配這個陣列(觸發率不到 1%), 所以不影響記憶體。
                                                 let steps = 0, last = "";
+                                                const seq = [];
                                                 for (let i = 1; i <= 5; i++) {
                                                     const v = row["BGLevel" + i];
                                                     if (!v) break;
-                                                    steps = i; last = String(v).split(",").pop().trim();
+                                                    const parts = String(v).split(",").map(x => x.trim());
+                                                    steps = i; last = parts[parts.length - 1];
+                                                    // 三欄格式: [模式, 選擇, 結果]。欄數不符時只留結果, 不要猜。
+                                                    seq.push(parts.length === 3
+                                                        ? { m: parts[0], p: parts[1], o: parts[2] }
+                                                        : { m: '', p: '', o: last });
                                                 }
                                                 if (steps) {
                                                     if (!g.wBonusReach) { g.wBonusReach = new Array(6).fill(0); g.wBonusBomb = new Array(6).fill(0); }
                                                     for (let i = 1; i <= steps; i++) g.wBonusReach[i] += 1;
                                                     if (last === "Bomb") g.wBonusBomb[steps] += 1;
+                                                    // 一局最多只會有一個二級: 三同球代表三顆球落在同一格,
+                                                    // 所以不可能有兩個格位同時觸發。
+                                                    g.bg = { cell: betPlace, seq, bet, payout,
+                                                             mult: parseFloat(row['Multiplier']) || 0,
+                                                             result: row['Game Result'] || '' };
                                                 }
                                             }
                                             if (Object.keys(extra).length) g.hasExtra = true;
@@ -5946,6 +6076,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dismissedNotices, dismissNotice,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16, openRangePicker,
+                    playerBonusRuns,
                     shiftWindow, canShift, snapToWholeDays,
                     isPartialDay, dayWindowOf, dayCoveredFully, hasPartialDay, rangeTextShort, ballGranDisabled,
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
@@ -5958,7 +6089,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     matchedAlias, placePreference,
                     highValueThreshold, midValueThreshold, clusterStats, recomputeStats,
                     selectedPlayer, showChartModal, openChart,
-                    showBetTrendModal, openBetTrend, betTrendMode, betTrendSize,
+                    showBetTrendModal, openBetTrend, betTrendMode, betTrendSize, showBonusModal,
                     betTrendBuckets, betTrendTotals, betTrendOptions: BET_TREND_OPTIONS, heatCell, playerAlignment, playerDays, playerView, selectedDay,
                     segmentFilter, exportPlayerList,
                     exportRounds, exportSummary,
