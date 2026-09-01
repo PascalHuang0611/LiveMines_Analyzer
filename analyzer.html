@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.89</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.90</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1238,9 +1238,16 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     class="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors z-10">✕</button>
 
                 <div class="px-6 py-4 border-b border-white/10 pr-12">
-                    <h3 class="text-xl font-bold text-white">
-                        二級玩法回顧 · <span class="text-pink-300">{{ displayName(selectedPlayer) }}</span>
-                    </h3>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <h3 class="text-xl font-bold text-white">
+                            二級玩法回顧 · <span class="text-pink-300">{{ displayName(selectedPlayer) }}</span>
+                        </h3>
+                        <button v-if="playerBonusRuns.length" @click="exportBonusRuns"
+                            class="px-3 py-1 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
+                            :title="`匯出目前列出的 ${bonusRunsShown.length} 局：局號、每層的選擇與結果、二級實得`">
+                            匯出 CSV
+                        </button>
+                    </div>
                     <p class="text-xs text-gray-500 mt-1">
                         三顆球落在同一格（三同球）才會進二級。進去之後每一層有四扇可選，選中就能往上爬或收手，選錯就結束。
                         <span class="text-gray-300">這裡列出他每一次進二級時，每一層選了第幾扇。</span><br>
@@ -1284,6 +1291,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2">
                                     <span class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                                         <span class="font-mono text-xs text-gray-400">{{ r.wall }}</span>
+                                        <!-- 局號: 要回頭去後台查那一局時就靠它 -->
+                                        <span class="font-mono text-[10px] text-gray-500 select-all cursor-text"
+                                            title="局號（Game Code）。可直接選取複製。">{{ r.code }}</span>
                                         <span class="text-[11px] text-gray-500">押第 <span class="text-gray-300">{{ r.cell }}</span> 格</span>
                                         <span class="text-[11px] text-gray-500">賽果 <span class="font-mono text-gray-300">{{ r.result }}</span></span>
                                         <span v-if="r.auto" class="text-[10px] text-sky-300 border border-sky-400/40 rounded px-1"
@@ -4658,6 +4668,42 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 };
                 const closeDailyTrend = () => { dailyTrendSeg.value = null; };
 
+                // 二級玩法回顧的匯出。跟畫面上看到的一致 —— 有篩層數就只匯那幾局,
+                // 檔名也把篩選寫進去, 免得兩份檔案看起來一樣卻內容不同。
+                // 逐層拆成 L1~L5 五欄(「選3-過關」這種), 另外給一欄整串的闖關過程 ——
+                // 前者好做樞紐分析, 後者好用眼睛讀, 兩種需求都會有。
+                const exportBonusRuns = () => {
+                    const p = selectedPlayer.value;
+                    const runs = bonusRunsShown.value;
+                    if (!p || !runs.length) return;
+                    const OUT = { Continue: '過關', CashOut: '收手', Bomb: '爆' };
+                    const step = (x) => x ? ('選' + (x.p || '?') + '-' + (OUT[x.o] || x.o)) : '';
+                    const rows = [
+                        ['# 玩家', p.account],
+                        ['# 暱稱', nicknameOf(p) || ''],
+                        ['# 時間範圍', rangeTextShort()],
+                        ['# 篩選', bonusLevelFilter.value ? ('只含結束在第 ' + bonusLevelFilter.value + ' 層') : '全部'],
+                        ['# 說明', '二級實得 = 該局派彩扣掉一級(三同球本身的賠付與閃電加成)。爆掉的局二級為 0。倍率是該局總倍率, 已含一級。'],
+                        [],
+                        ['時間', '局號', '押注格', '賽果', '投注', '該局派彩', '其中二級', '倍率',
+                         '到達層數', '結束方式', '模式', 'L1', 'L2', 'L3', 'L4', 'L5', '闖關過程']
+                    ];
+                    runs.forEach(r => {
+                        rows.push([
+                            r.wall, r.code, r.cell, r.result,
+                            r.bet, r.payout, Math.round(r.bonus * 100) / 100, r.mult,
+                            r.steps,
+                            r.bombed ? '爆掉' : (r.cashedOut ? '收手' : '記錄止於此'),
+                            r.auto ? 'Auto' : 'Manual',
+                            step(r.seq[0]), step(r.seq[1]), step(r.seq[2]), step(r.seq[3]), step(r.seq[4]),
+                            r.seq.map((x, i) => 'L' + (i + 1) + ' ' + step(x)).join(' → ')
+                        ]);
+                    });
+                    const scope = bonusLevelFilter.value ? ('L' + bonusLevelFilter.value + '結束') : '全部';
+                    downloadCsv(('二級玩法_' + (nicknameOf(p) || p.account) + '_' + scope + '_' + rangeStamp() + '.csv')
+                        .replace(/[\\/:*?"<>|]/g, '_'), rows);
+                };
+
                 // 每一天一列。parts 的分母跟 rtp 同一個, 所以五項相加就等於當日 RTP ——
                 // 堆疊圖的柱高因此正好是那天的 RTP, 兩張圖可以直接對照著看。
                 // 那一天那個視角完全沒有局時 rtp 是 null 而不是 0: 0% 會被讀成「那天全輸給莊家」,
@@ -6380,7 +6426,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dismissedNotices, dismissNotice,
                     rangeFrom, rangeTo, availableDays, rangeDays, rangeIsFull, resetRange, activeRounds, allRounds,
                     rangeFromInput, rangeToInput, rangeMode, rangeRestored, dataSpan, toInput16, openRangePicker,
-                    playerBonusRuns, playerBonusLevels, bonusLevelFilter, bonusRunsShown,
+                    playerBonusRuns, playerBonusLevels, bonusLevelFilter, bonusRunsShown, exportBonusRuns,
                     shiftWindow, canShift, snapToWholeDays,
                     isPartialDay, dayWindowOf, dayCoveredFully, hasPartialDay, rangeTextShort, ballGranDisabled,
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
