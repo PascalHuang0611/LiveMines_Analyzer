@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.86</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.87</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -1570,11 +1570,11 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         <!-- 兩張圖放在同一個捲動容器裡, 分開捲會失去「同一天上下對照」的意義 -->
                         <div class="overflow-x-auto pb-2">
                             <div :style="{ minWidth: dailyTrendMinWidth + 'px' }">
-                                <div class="text-xs text-gray-400 mb-1">每日 RTP<span class="text-gray-600 ml-2">虛線為區間平均；空心點代表那一天只涵蓋部分時段</span></div>
+                                <div class="text-xs text-gray-400 mb-1">每日 RTP<span class="text-gray-600 ml-2">黃線＝RTP（左軸）；灰色虛線面積＝當日投注額（右軸），用來分辨「RTP 動了」是賠率還是量。虛線為區間平均；空心點代表那一天只涵蓋部分時段</span></div>
                                 <div class="h-64"><canvas id="trendRtpChart"></canvas></div>
                                 <div class="text-xs text-gray-400 mt-5 mb-1">每日 RTP 組成<span class="text-gray-600 ml-2">柱高＝當日 RTP，與上圖同一條線</span></div>
                                 <div class="h-64"><canvas id="trendCompChart"></canvas></div>
-                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">當天有玩的人隔天還在的比例；與上方的 全體／有 EX／沒 EX 無關，切換不會變。最右邊沒有點是因為沒有隔天可比；倒數第二點會偏低（隔天還沒過完），下次匯入就會長回去</span></div>
+                                <div v-if="dailyTrendRetention.length" class="text-xs text-gray-400 mt-5 mb-1">D+1 留存<span class="text-gray-600 ml-2">綠線＝留存率（左軸）；灰色虛線面積＝當日人數（右軸），用來分辨「留存掉了」是人變少還是回訪變差。與上方的 全體／有 EX／沒 EX 無關，切換不會變。最右邊沒有點是因為沒有隔天可比；倒數第二點會偏低（隔天還沒過完），下次匯入就會長回去</span></div>
                                 <div v-if="dailyTrendRetention.length" class="h-56"><canvas id="trendRetChart"></canvas></div>
                             </div>
                         </div>
@@ -4699,6 +4699,24 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     // 三張圖的 y 軸寬度都鎖死, 否則刻度字寬不同會讓同一天上下對不齊 ——
                     // 它們共用一個橫向捲動容器, 對不齊就完全失去並排看的意義。
                     const lockY = (a) => { a.width = 56; };
+                    // RTP 圖與留存圖各多一條走右軸的「量」——「掉下去是率的問題還是量的問題」
+                    // 要並排才看得出來。右軸會吃掉繪圖區寬度, 所以三張圖都鎖同一個右軸寬度,
+                    // 中間那張堆疊圖沒有右軸資料, 也要掛一條空的當佔位, 否則同一天會對不齊。
+                    const lockY1 = (a) => { a.width = 46; };
+                    const Y1_BLANK = { position: 'right', afterFit: lockY1,
+                        grid: { display: false, drawBorder: false },
+                        border: { display: false }, ticks: { display: false } };
+                    // 量的軸一律從 0 起算 —— 這兩條是拿來看「規模有沒有塌」的,
+                    // 不從 0 起會把 5% 的波動畫成斷崖。
+                    const y1Scale = (fmt) => ({ position: 'right', beginAtZero: true, afterFit: lockY1,
+                        grid: { display: false, drawBorder: false }, border: { display: false },
+                        ticks: { color: 'rgba(148,163,184,0.75)', maxTicksLimit: 5, callback: fmt } });
+                    const compactNum = (v) => v >= 1e8 ? (v / 1e8).toFixed(1) + '億'
+                        : v >= 1e4 ? Math.round(v / 1e4) + '萬' : String(v);
+                    // 面積畫在底層當背景, 主線才是主角。order 大的先畫。
+                    const Y1_LINE = { yAxisID: 'y1', order: 3, fill: true, tension: 0.25,
+                        borderWidth: 1, borderDash: [4, 3], pointRadius: 0, pointHoverRadius: 4,
+                        borderColor: 'rgba(148, 163, 184, 0.9)', backgroundColor: 'rgba(148, 163, 184, 0.10)' };
                     const dayTitle = (c) => {
                         const r = rows[c[0].dataIndex];
                         return r.day + (r.partial ? `（部分時段 ${r.window}）` : '');
@@ -4713,8 +4731,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         data: {
                             labels,
                             datasets: [
+                                { ...Y1_LINE, label: '當日投注額', data: rows.map(r => r.empty ? null : r.bet) },
                                 {
                                     label: '當日 RTP',
+                                    order: 1,
                                     data: rows.map(r => r.rtp),
                                     borderColor: 'rgba(250, 204, 21, 1)',
                                     backgroundColor: 'rgba(250, 204, 21, 0.10)',
@@ -4728,6 +4748,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 },
                                 {
                                     label: '區間平均',
+                                    order: 2,
                                     data: rows.map(() => avg),
                                     borderColor: 'rgba(148, 163, 184, 0.8)',
                                     borderDash: [5, 5], pointRadius: 0, borderWidth: 1, fill: false
@@ -4744,8 +4765,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 tooltip: { callbacks: {
                                     title: dayTitle,
                                     label: (c) => {
-                                        if (c.datasetIndex === 1) return `區間平均 ${avg.toFixed(2)}%`;
+                                        // 用 label 而不是 datasetIndex 判斷 —— 前面插了一條之後
+                                        // 索引就位移了, 用索引的寫法會靜默把標籤配錯資料。
                                         const r = rows[c.dataIndex];
+                                        if (c.dataset.label === '當日投注額')
+                                            return `當日投注額 ${formatMoney(r.bet)}`;
+                                        if (c.dataset.label === '區間平均') return `區間平均 ${avg.toFixed(2)}%`;
                                         if (r.empty) return '此視角當日無局';
                                         return [`當日 RTP ${r.rtp.toFixed(2)}%`,
                                                 `投注 ${formatMoney(r.bet)}`,
@@ -4757,6 +4782,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             scales: {
                                 y: { min: lo - pad, max: hi + pad, afterFit: lockY,
                                      grid: GRID, ticks: { color: AXIS.color, callback: (v) => v.toFixed(0) + '%' } },
+                                y1: y1Scale(compactNum),
                                 x: { grid: { display: false }, ticks: { color: AXIS.color, autoSkip: false, maxRotation: 0 } }
                             }
                         }
@@ -4798,6 +4824,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 y: { stacked: true, beginAtZero: true, max: Math.ceil((maxTotal * 1.08) / 5) * 5,
                                      afterFit: lockY,
                                      grid: GRID, ticks: { color: AXIS.color, callback: (v) => v + '%' } },
+                                y1: Y1_BLANK,
                                 x: { stacked: true, grid: { display: false },
                                      ticks: { color: AXIS.color, autoSkip: false, maxRotation: 0 } }
                             }
@@ -4823,8 +4850,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             data: {
                                 labels,
                                 datasets: [
+                                    { ...Y1_LINE, label: '當日人數', data: ret.map(r => r.cohort || null) },
                                     {
                                         label: 'D+1 留存',
+                                        order: 1,
                                         data: ret.map(r => r.rate),
                                         borderColor: 'rgba(52, 211, 153, 1)',
                                         backgroundColor: 'rgba(52, 211, 153, 0.10)',
@@ -4835,6 +4864,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     }
                                 ].concat(rAvg === null ? [] : [{
                                     label: '區間平均',
+                                    order: 2,
                                     data: ret.map(() => rAvg),
                                     borderColor: 'rgba(148, 163, 184, 0.8)',
                                     borderDash: [5, 5], pointRadius: 0, borderWidth: 1, fill: false
@@ -4849,8 +4879,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     tooltip: { callbacks: {
                                         title: dayTitle,
                                         label: (c) => {
-                                            if (c.datasetIndex === 1) return `區間平均 ${rAvg.toFixed(2)}%`;
                                             const r = ret[c.dataIndex];
+                                            if (c.dataset.label === '當日人數')
+                                                return `當日人數 ${(r.cohort || 0).toLocaleString()} 人`;
+                                            if (c.dataset.label === '區間平均') return `區間平均 ${rAvg.toFixed(2)}%`;
                                             if (r.rate === null)
                                                 return r.reason === 'nobody' ? '此分群當日無人遊玩' : '沒有隔天可比（區間最後一天）';
                                             return [`D+1 留存 ${r.rate.toFixed(2)}%`,
@@ -4862,6 +4894,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 scales: {
                                     y: { min: Math.max(0, rlo - rpad), max: Math.min(100, rhi + rpad), afterFit: lockY,
                                          grid: GRID, ticks: { color: AXIS.color, callback: (v) => v.toFixed(0) + '%' } },
+                                    y1: y1Scale((v) => v >= 1000 ? (v / 1000) + 'k' : String(v)),
                                     x: { grid: { display: false }, ticks: { color: AXIS.color, autoSkip: false, maxRotation: 0 } }
                                 }
                             }
