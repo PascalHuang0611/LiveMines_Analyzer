@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.88</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.89</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -760,7 +760,14 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 <div class="glass rounded-2xl p-6">
                     <div class="flex flex-wrap justify-between items-baseline gap-2 mb-4">
                         <h3 class="text-lg font-bold text-white">版面冷熱區 (Hot Zones)</h3>
-                        <p class="text-xs text-gray-500">此為「物理賽果」統計，剔除了同局重複計算。格內為 次數／占比（均勻 11.1%）。</p>
+                        <!-- 這個切換與大盤落球熱力圖共用同一個設定, 會記在瀏覽器 -->
+                        <div class="flex rounded overflow-hidden border border-white/10">
+                            <button v-for="m in heatLabels" :key="m.k" @click="heatLabelMode = m.k"
+                                class="px-2 py-0.5 text-[11px] transition-colors"
+                                :class="heatLabelMode === m.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'"
+                                :title="m.k === 'both' ? '格內同時顯示次數與占比' : (m.k === 'pct' ? '只顯示占比, 字比較大' : '只顯示次數, 字比較大')">{{ m.t }}</button>
+                        </div>
+                        <p class="text-xs text-gray-500 w-full">此為「物理賽果」統計，剔除了同局重複計算。均勻為 11.1%。</p>
                     </div>
 
                     <!-- 三張一起顯示, 不做切換。落球是遊戲給的、免費閃電是每局固定送的、
@@ -777,9 +784,13 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     class="rounded-lg flex flex-col items-center justify-center font-bold transition-all shadow-lg"
                                     :style="{ backgroundColor: heatCellOf(src.k, i).bg, color: heatCellOf(src.k, i).fg }"
                                     :title="`${src.t}　第 ${i} 格　${getHeatCount(src.k, i).toLocaleString()} 次\n占比 ${(heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${heatCellOf(src.k, i).z.toFixed(2)}`">
-                                    <span class="text-base leading-none">{{ i }}</span>
-                                    <span class="text-[9px] opacity-80 leading-tight">{{ getHeatCount(src.k, i).toLocaleString() }}</span>
-                                    <span class="text-[9px] opacity-60 leading-tight">{{ (heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1) }}%</span>
+                                    <span class="leading-none" :class="heatLabelMode === 'both' ? 'text-base' : 'text-lg'">{{ i }}</span>
+                                    <template v-if="heatLabelMode === 'both'">
+                                        <span class="text-[9px] opacity-80 leading-tight">{{ getHeatCount(src.k, i).toLocaleString() }}</span>
+                                        <span class="text-[9px] opacity-60 leading-tight">{{ (heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1) }}%</span>
+                                    </template>
+                                    <span v-else-if="heatLabelMode === 'pct'" class="text-[11px] opacity-80 leading-tight mt-0.5">{{ (heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1) }}%</span>
+                                    <span v-else class="text-[11px] opacity-80 leading-tight mt-0.5">{{ getHeatCount(src.k, i).toLocaleString() }}</span>
                                 </div>
                             </div>
                         </div>
@@ -1669,6 +1680,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                         </button>
                     </div>
                     <span class="text-xs text-gray-500">{{ houseStats.ballBuckets.length }} 個區間</span>
+                    <div class="flex rounded overflow-hidden border border-white/10">
+                        <button v-for="m in heatLabels" :key="m.k" @click="heatLabelMode = m.k"
+                            class="px-2 py-0.5 text-[11px] transition-colors"
+                            :class="heatLabelMode === m.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'"
+                            :title="m.k === 'both' ? '格內同時顯示次數與占比' : (m.k === 'pct' ? '只顯示占比, 字比較大' : '只顯示次數, 字比較大')">{{ m.t }}</button>
+                    </div>
                     <button @click="exportBallHeatmapPng"
                         class="ml-auto px-3 py-1.5 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30">
                         匯出 PNG
@@ -1699,8 +1716,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
                                               color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
                                     :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
-                                    <span class="text-xs font-bold">{{ b.counts[g-1] }}</span>
-                                    <span class="text-[9px] opacity-70 mt-px">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
+                                    <template v-if="heatLabelMode === 'both'">
+                                        <span class="text-xs font-bold">{{ b.counts[g-1] }}</span>
+                                        <span class="text-[9px] opacity-70 mt-px">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
+                                    </template>
+                                    <span v-else-if="heatLabelMode === 'pct'" class="text-sm font-bold">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
+                                    <span v-else class="text-sm font-bold">{{ b.counts[g-1] }}</span>
                                 </div>
                             </div>
                             <div class="text-[9px] text-gray-500 mt-1.5 text-center">
@@ -2260,6 +2281,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     title="開啟放大檢視，一次看到所有區間">
                                     放大檢視
                                 </button>
+                                <div class="flex rounded overflow-hidden border border-white/10">
+                            <button v-for="m in heatLabels" :key="m.k" @click="heatLabelMode = m.k"
+                                class="px-2 py-0.5 text-[11px] transition-colors"
+                                :class="heatLabelMode === m.k ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-white/5'"
+                                :title="m.k === 'both' ? '格內同時顯示次數與占比' : (m.k === 'pct' ? '只顯示占比, 字比較大' : '只顯示次數, 字比較大')">{{ m.t }}</button>
+                        </div>
                                 <button @click="exportBallHeatmapPng"
                                     class="px-2.5 py-1 rounded text-xs font-bold transition-colors border bg-emerald-700/40 hover:bg-emerald-600/50 border-emerald-500/30"
                                     :title="`把目前的 ${houseStats.ballBuckets.length} 個區間匯出成 PNG，樣式與畫面相同`">
@@ -2290,8 +2317,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                             :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
                                                       color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
                                             :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
-                                            <span class="text-[13px] font-bold">{{ b.counts[g-1] }}</span>
-                                            <span class="text-[10px] opacity-70 mt-px">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
+                                            <template v-if="heatLabelMode === 'both'">
+                                                <span class="text-[13px] font-bold">{{ b.counts[g-1] }}</span>
+                                                <span class="text-[10px] opacity-70 mt-px">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
+                                            </template>
+                                            <span v-else-if="heatLabelMode === 'pct'" class="text-base font-bold">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
+                                            <span v-else class="text-base font-bold">{{ b.counts[g-1] }}</span>
                                         </div>
                                     </div>
                                     <div class="text-[9px] text-gray-500 mt-1.5 text-center">
@@ -2503,6 +2534,14 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     set(key, val) { try { localStorage.setItem(key, val); } catch (e) { /* 忽略: 設定不會被保留 */ } },
                     remove(key) { try { localStorage.removeItem(key); } catch (e) { /* 同上 */ } }
                 };
+
+                // 熱力圖格子裡要顯示什麼。大盤的落球熱力圖與玩家的版面冷熱區共用同一個設定 ——
+                // 它是「我想怎麼讀熱力圖」這件事, 不該在兩個分頁各記一份、各自漂移。
+                // 只顯示一種時字放大: 兩種擠在一起時每一行都得縮小, 單獨顯示就沒有那個限制。
+                const HEAT_LABELS = [{ k: 'both', t: '兩者' }, { k: 'pct', t: '占比' }, { k: 'count', t: '次數' }];
+                const savedHeatLabel = store.get('livemines_heat_label');
+                const heatLabelMode = ref(HEAT_LABELS.some(x => x.k === savedHeatLabel) ? savedHeatLabel : 'both');
+                watch(heatLabelMode, (v) => store.set('livemines_heat_label', v));
 
                 // ===== 時間範圍篩選 =====
                 // 端點型別 = 19 碼牆上時間字串 'YYYY-MM-DD HH:MM:SS', 或 '' 代表資料還沒載入。
@@ -5550,14 +5589,21 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             ctx.fillStyle = d.fg;
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';
-                            // 跟畫面一致: 上顆數、下占比。兩行往中線上下各挪一點, CELL 是 40px 塞得下。
-                            ctx.font = 'bold 13px ' + FONT;
-                            ctx.fillText(String(b.counts[g]), x + CELL / 2, y + CELL / 2 - 6);
-                            ctx.font = '9px ' + FONT;
-                            ctx.globalAlpha = 0.75;
-                            ctx.fillText((b.total ? b.counts[g] / b.total * 100 : 0).toFixed(1) + '%',
-                                x + CELL / 2, y + CELL / 2 + 8);
-                            ctx.globalAlpha = 1;
+                            // 跟畫面上目前選的模式一致。兩者並存時分兩行(中線上下各挪一點,
+                            // CELL 是 40px 塞得下); 只顯示一種時字放大並置中。
+                            const pctTxt = (b.total ? b.counts[g] / b.total * 100 : 0).toFixed(1) + '%';
+                            if (heatLabelMode.value === 'both') {
+                                ctx.font = 'bold 13px ' + FONT;
+                                ctx.fillText(String(b.counts[g]), x + CELL / 2, y + CELL / 2 - 6);
+                                ctx.font = '9px ' + FONT;
+                                ctx.globalAlpha = 0.75;
+                                ctx.fillText(pctTxt, x + CELL / 2, y + CELL / 2 + 8);
+                                ctx.globalAlpha = 1;
+                            } else {
+                                ctx.font = 'bold 14px ' + FONT;
+                                ctx.fillText(heatLabelMode.value === 'pct' ? pctTxt : String(b.counts[g]),
+                                    x + CELL / 2, y + CELL / 2);
+                            }
                             ctx.textBaseline = 'top';
                         }
 
@@ -5587,8 +5633,10 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     ctx.textAlign = 'left';
                     ctx.fillText('偏熱', bx + barW + 8, ly);
                     ctx.fillStyle = '#64748b';
-                    ctx.fillText('顏色為與該區間平均的差距（|z| ≥ 3 為滿色）；格內上排是球數、下排是占該區間的比例（均勻 11.1%）',
-                        bx + barW + 44, ly);
+                    ctx.fillText('顏色為與該區間平均的差距（|z| ≥ 3 為滿色）；格內'
+                        + (heatLabelMode.value === 'both' ? '上排是球數、下排是占該區間的比例'
+                           : heatLabelMode.value === 'pct' ? '是該格占該區間的比例' : '是該格開出的球數')
+                        + '（均勻 11.1%）', bx + barW + 44, ly);
 
                     cv.toBlob((blob) => {
                         const url = URL.createObjectURL(blob);
@@ -6338,7 +6386,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     dayCutoverHour, dayMode, dayTermLabel, dayBoundaryText, dayRationale,
                     timeSpanWarning, billTimeSpan, gameTimeSpan, coverageGap,
                     sortedPlayers, formatMoney,
-                    handleFileSelect, gridsBetDist, getHeatCount, heatCellOf, heatTotalOf,
+                    handleFileSelect, gridsBetDist, getHeatCount, heatCellOf, heatTotalOf, heatLabelMode, heatLabels: HEAT_LABELS,
                     chiSquareTest, sortBy, displayCount, handleTableScroll,
                     playerSearch, filteredPlayers, highlightParts,
                     btnBase, nicknameOf, nicknamesOf, nicknameEntriesOf, nicknameHistory, nickTime, aliasLastUsed, displayName, showNicknameModal, NICK_PREVIEW, nicknameCount, nicknameMap, playersMap, physicalGames,
