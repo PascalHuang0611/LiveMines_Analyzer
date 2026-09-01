@@ -184,7 +184,7 @@
                         <span style="font-family: 'Orbitron', sans-serif;">LiveMines</span>
                         <span style="font-family: 'Noto Sans TC', sans-serif;" class="text-3xl ml-1">資料分析儀表板</span>
                     </div>
-                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.87</span>
+                    <span class="coin-spin text-xl text-cyan-300 tracking-normal font-bold">v1.88</span>
                 </h1>
                 <p class="animate-subtitle text-gray-400 mt-3 font-medium tracking-wide">本地端快速透視：押注格數分佈、版面冷熱區、玩家獲利榜</p>
             </div>
@@ -760,7 +760,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                 <div class="glass rounded-2xl p-6">
                     <div class="flex flex-wrap justify-between items-baseline gap-2 mb-4">
                         <h3 class="text-lg font-bold text-white">版面冷熱區 (Hot Zones)</h3>
-                        <p class="text-xs text-gray-500">此為「物理賽果」統計，剔除了同局重複計算。</p>
+                        <p class="text-xs text-gray-500">此為「物理賽果」統計，剔除了同局重複計算。格內為 次數／占比（均勻 11.1%）。</p>
                     </div>
 
                     <!-- 三張一起顯示, 不做切換。落球是遊戲給的、免費閃電是每局固定送的、
@@ -777,8 +777,9 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     class="rounded-lg flex flex-col items-center justify-center font-bold transition-all shadow-lg"
                                     :style="{ backgroundColor: heatCellOf(src.k, i).bg, color: heatCellOf(src.k, i).fg }"
                                     :title="`${src.t}　第 ${i} 格　${getHeatCount(src.k, i).toLocaleString()} 次\n占比 ${(heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${heatCellOf(src.k, i).z.toFixed(2)}`">
-                                    <span class="text-lg">{{ i }}</span>
-                                    <span class="text-[9px] opacity-80">{{ getHeatCount(src.k, i).toLocaleString() }}</span>
+                                    <span class="text-base leading-none">{{ i }}</span>
+                                    <span class="text-[9px] opacity-80 leading-tight">{{ getHeatCount(src.k, i).toLocaleString() }}</span>
+                                    <span class="text-[9px] opacity-60 leading-tight">{{ (heatTotalOf(src.k) ? getHeatCount(src.k, i)/heatTotalOf(src.k)*100 : 0).toFixed(1) }}%</span>
                                 </div>
                             </div>
                         </div>
@@ -1690,12 +1691,16 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                 <span class="text-[9px] text-gray-500 shrink-0 ml-1">{{ b.rounds }} 局</span>
                             </div>
                             <div class="grid grid-cols-3 gap-px bg-black/40 rounded overflow-hidden">
+                                <!-- 兩行: 上顆數、下占比。占比才是能跨區間比較的量 —— 區間切得越細顆數越小,
+                                     光看顆數會以為冷區更冷了, 其實只是那個區間比較短。
+                                     顏色本來就是照占比的偏離算的(divergingCell), 現在把它讀得出來。 -->
                                 <div v-for="g in 9" :key="g"
-                                    class="aspect-square flex items-center justify-center text-xs font-bold cursor-help"
+                                    class="aspect-square flex flex-col items-center justify-center leading-none cursor-help"
                                     :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
                                               color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
                                     :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
-                                    {{ b.counts[g-1] }}
+                                    <span class="text-xs font-bold">{{ b.counts[g-1] }}</span>
+                                    <span class="text-[9px] opacity-70 mt-px">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
                                 </div>
                             </div>
                             <div class="text-[9px] text-gray-500 mt-1.5 text-center">
@@ -2281,11 +2286,12 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                                     </div>
                                     <div class="grid grid-cols-3 gap-px bg-black/40 rounded overflow-hidden">
                                         <div v-for="g in 9" :key="g"
-                                            class="aspect-square flex items-center justify-center text-[11px] font-bold cursor-help"
+                                            class="aspect-square flex flex-col items-center justify-center leading-none cursor-help"
                                             :style="{ backgroundColor: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).bg,
                                                       color: divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).fg }"
                                             :title="`${b.label}　第 ${g} 格\n開出 ${b.counts[g-1]} 顆 / 該區間 ${b.total} 顆\n占比 ${(b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1)}%（均勻為 11.1%）\nz = ${divergingCell(b.counts[g-1], b.total, houseStats.ballPattern.deff).z.toFixed(2)}`">
-                                            {{ b.counts[g-1] }}
+                                            <span class="text-[13px] font-bold">{{ b.counts[g-1] }}</span>
+                                            <span class="text-[10px] opacity-70 mt-px">{{ (b.total ? b.counts[g-1]/b.total*100 : 0).toFixed(1) }}%</span>
                                         </div>
                                     </div>
                                     <div class="text-[9px] text-gray-500 mt-1.5 text-center">
@@ -5542,10 +5548,16 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                             ctx.fillStyle = d.bg;
                             ctx.fillRect(x, y, CELL, CELL);
                             ctx.fillStyle = d.fg;
-                            ctx.font = 'bold 13px ' + FONT;
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';
-                            ctx.fillText(String(b.counts[g]), x + CELL / 2, y + CELL / 2);
+                            // 跟畫面一致: 上顆數、下占比。兩行往中線上下各挪一點, CELL 是 40px 塞得下。
+                            ctx.font = 'bold 13px ' + FONT;
+                            ctx.fillText(String(b.counts[g]), x + CELL / 2, y + CELL / 2 - 6);
+                            ctx.font = '9px ' + FONT;
+                            ctx.globalAlpha = 0.75;
+                            ctx.fillText((b.total ? b.counts[g] / b.total * 100 : 0).toFixed(1) + '%',
+                                x + CELL / 2, y + CELL / 2 + 8);
+                            ctx.globalAlpha = 1;
                             ctx.textBaseline = 'top';
                         }
 
@@ -5575,7 +5587,7 @@ ${lv.reach >= 200 ? '樣本足夠，實色顯示' : '到過不足 200 次，存�
                     ctx.textAlign = 'left';
                     ctx.fillText('偏熱', bx + barW + 8, ly);
                     ctx.fillStyle = '#64748b';
-                    ctx.fillText('顏色為與該區間平均的差距（|z| ≥ 3 為滿色）；格內數字是該格開出的球數',
+                    ctx.fillText('顏色為與該區間平均的差距（|z| ≥ 3 為滿色）；格內上排是球數、下排是占該區間的比例（均勻 11.1%）',
                         bx + barW + 44, ly);
 
                     cv.toBlob((blob) => {
